@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, use, useCallback, useEffect, useState } from "react";
+import { Fragment, startTransition, use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Lock, RotateCcw, Users, X } from "lucide-react";
 import { ApiError, fetchState, resumeSession, saveProgress } from "@/lib/clientApi";
@@ -10,20 +10,30 @@ import {
   saveStoredIdentity,
   StoredIdentity,
 } from "@/lib/participantStorage";
-import { StepASubmission, StepBKey, StepBSubmission, StepCSubmission, Submission, UnlockedSteps } from "@/lib/types";
+import {
+  Block2Submission,
+  StepASubmission,
+  StepBKey,
+  StepBSubmission,
+  StepCSubmission,
+  Submission,
+  UnlockedSteps,
+} from "@/lib/types";
 import { DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 import { nowMs } from "@/lib/time";
 import StepA from "@/components/StepA";
 import StepB from "@/components/StepB";
 import StepC from "@/components/StepC";
+import Block2Form from "@/components/Block2Form";
 
-type Tab = "A" | "B" | "C";
+type Tab = "A" | "B" | "C" | "UC";
 
 const POLL_MS = 4000;
 
 function isTabUnlocked(tab: Tab, steps: UnlockedSteps): boolean {
   if (tab === "A") return steps.A;
   if (tab === "B") return steps.variabilita || steps.dati || steps.docStandard || steps.criteri;
+  if (tab === "UC") return steps.useCase;
   return steps.C;
 }
 
@@ -33,7 +43,8 @@ function hasWork(submission: Submission): boolean {
       submission.stepA?.completedAt ||
       submission.stepA?.updatedAt ||
       (submission.stepB && Object.keys(submission.stepB).length > 0) ||
-      submission.stepC?.sintesi
+      submission.stepC?.sintesi ||
+      submission.block2?.updatedAt
   );
 }
 
@@ -153,6 +164,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
   const stepA = submission.stepA;
   const stepB = submission.stepB;
   const stepC = submission.stepC;
+  const block2 = submission.block2;
 
   function updateSubmission(patch: Partial<Submission>) {
     setSubmission((prev) => ({ ...(prev as Submission), ...patch }));
@@ -198,6 +210,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
       unlocked: unlockedSteps.variabilita || unlockedSteps.dati || unlockedSteps.docStandard || unlockedSteps.criteri,
     },
     { key: "C", label: "C · Output", unlocked: unlockedSteps.C },
+    { key: "UC", label: "2 · Use Case", unlocked: unlockedSteps.useCase },
   ];
 
   return (
@@ -239,19 +252,22 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
         </div>
       )}
 
-      <nav className="mx-auto flex max-w-4xl gap-2 px-4 pt-4 sm:px-8">
+      <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-4 pt-4 sm:px-8">
         {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => t.unlocked && handleTabChange(t.key)}
-            disabled={!t.unlocked}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-              tab === t.key ? "bg-ifab-navy text-white" : "bg-white text-ifab-navy border border-ifab-border"
-            }`}
-          >
-            {!t.unlocked && <Lock size={13} />}
-            {t.label}
-          </button>
+          <Fragment key={t.key}>
+            {/* Separatore fra gli step del Blocco 1 e la scheda del Blocco 2 */}
+            {t.key === "UC" && <span className="mx-1 hidden h-6 w-px bg-ifab-border sm:block" />}
+            <button
+              onClick={() => t.unlocked && handleTabChange(t.key)}
+              disabled={!t.unlocked}
+              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                tab === t.key ? "bg-ifab-navy text-white" : "bg-white text-ifab-navy border border-ifab-border"
+              }`}
+            >
+              {!t.unlocked && <Lock size={13} />}
+              {t.label}
+            </button>
+          </Fragment>
         ))}
       </nav>
 
@@ -279,6 +295,23 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
             }
           />
         )}
+        {tab === "UC" &&
+          (unlockedSteps.useCase ? (
+            <Block2Form
+              code={code}
+              participantId={identity.participantId}
+              stepA={stepA}
+              block2={block2}
+              onSaved={(data: Block2Submission) =>
+                updateSubmission({ block2: { ...block2, ...data, values: { ...block2?.values, ...data.values } } })
+              }
+            />
+          ) : (
+            <div className="rounded-xl border border-dashed border-ifab-border bg-white p-8 text-center text-sm text-ifab-text-muted">
+              <Lock className="mx-auto mb-2" size={20} />
+              In attesa che il facilitatore sblocchi la scheda Use Case.
+            </div>
+          ))}
         {tab === "C" &&
           (unlockedSteps.C ? (
             <StepC

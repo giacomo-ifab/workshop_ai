@@ -14,17 +14,21 @@ import {
 } from "@/lib/clientApi";
 import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
 import { CATEGORIES, STEP_B_CONFIG } from "@/config/block1Flow";
+import { BLOCK2_FIELDS } from "@/config/block2Form";
 import { Participant, Submission, StepBKey, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 
 const POLL_MS = 4000;
 
-const STEP_ORDER: { key: keyof UnlockedSteps; label: string }[] = [
-  { key: "A", label: "A · Identifica il processo" },
-  { key: "variabilita", label: "B1 · Variabilità" },
-  { key: "dati", label: "B2 · Disponibilità e qualità dei dati" },
-  { key: "docStandard", label: "B3 · Documenti standard" },
-  { key: "criteri", label: "B4 · Criteri e regole definite" },
-  { key: "C", label: "C · Output" },
+const BLOCK2_FIELD_COUNT = BLOCK2_FIELDS.length;
+
+const STEP_ORDER: { key: keyof UnlockedSteps; label: string; block: 1 | 2 }[] = [
+  { key: "A", label: "A · Identifica il processo", block: 1 },
+  { key: "variabilita", label: "B1 · Variabilità", block: 1 },
+  { key: "dati", label: "B2 · Disponibilità e qualità dei dati", block: 1 },
+  { key: "docStandard", label: "B3 · Documenti standard", block: 1 },
+  { key: "criteri", label: "B4 · Criteri e regole definite", block: 1 },
+  { key: "C", label: "C · Output", block: 1 },
+  { key: "useCase", label: "Use Case Submission", block: 2 },
 ];
 
 export default function FacilitatorDashboard({ params }: { params: Promise<{ code: string }> }) {
@@ -206,9 +210,34 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
         )}
 
         <section className="mb-6 rounded-xl bg-white p-5">
-          <h2 className="mb-3 text-sm font-semibold text-ifab-navy">Sblocca gli step</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ifab-navy">
+            Sblocca gli step <span className="font-normal text-ifab-text-muted">— Blocco 1</span>
+          </h2>
           <div className="flex flex-wrap gap-2">
-            {STEP_ORDER.map((s) => {
+            {STEP_ORDER.filter((s) => s.block === 1).map((s) => {
+              const unlocked = unlockedSteps[s.key];
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => toggleStep(s.key)}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    unlocked
+                      ? "border-ifab-blue bg-ifab-blue text-white"
+                      : "border-ifab-border bg-white text-ifab-text hover:border-ifab-blue"
+                  }`}
+                >
+                  {unlocked ? <LockOpen size={14} /> : <Lock size={14} />}
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <h2 className="mb-3 mt-5 text-sm font-semibold text-ifab-navy">
+            Sblocca gli step <span className="font-normal text-ifab-text-muted">— Blocco 2</span>
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {STEP_ORDER.filter((s) => s.block === 2).map((s) => {
               const unlocked = unlockedSteps[s.key];
               return (
                 <button
@@ -250,6 +279,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                     <th className="py-2 pr-4">Step A</th>
                     <th className="py-2 pr-4">Step B</th>
                     <th className="py-2 pr-4">Output</th>
+                    <th className="py-2 pr-4">Use Case</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -257,6 +287,15 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                     const bDone = (Object.keys(STEP_B_CONFIG) as StepBKey[]).filter(
                       (k) => submission.stepB?.[k]?.completedAt
                     ).length;
+                    // Blocco 2: distingue "consegnata" (Salva scheda) da "in bozza".
+                    const useCaseFilled = Object.values(submission.block2?.values ?? {}).filter((v) =>
+                      Array.isArray(v) ? v.length > 0 : Boolean(v && v.trim())
+                    ).length;
+                    const useCaseLabel = submission.block2?.completedAt
+                      ? "✅"
+                      : useCaseFilled > 0
+                        ? `${useCaseFilled}/${BLOCK2_FIELD_COUNT}`
+                        : "—";
                     return (
                       <tr key={participant.participantId} className="border-b border-ifab-border">
                         <td className="py-2 pr-4 font-medium text-ifab-text">{participant.name}</td>
@@ -264,12 +303,13 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                         <td className="py-2 pr-4">{submission.stepA?.completedAt ? "✅" : "—"}</td>
                         <td className="py-2 pr-4">{bDone}/4</td>
                         <td className="py-2 pr-4">{submission.stepC?.sintesi ? "✅" : "—"}</td>
+                        <td className="py-2 pr-4">{useCaseLabel}</td>
                       </tr>
                     );
                   })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-4 text-center text-ifab-text-muted">
+                      <td colSpan={6} className="py-4 text-center text-ifab-text-muted">
                         Nessun partecipante ancora connesso.
                       </td>
                     </tr>

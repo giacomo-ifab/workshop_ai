@@ -21,6 +21,8 @@ export type UnlockedSteps = {
   docStandard: boolean;
   criteri: boolean;
   C: boolean;
+  // Blocco 2 — Use Case Submission (un unico form, sbloccato in blocco).
+  useCase: boolean;
 };
 
 export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
@@ -30,6 +32,7 @@ export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
   docStandard: false,
   criteri: false,
   C: false,
+  useCase: false,
 };
 
 export type SessionMeta = {
@@ -85,12 +88,28 @@ export type StepCSubmission = {
 };
 
 /**
+ * Blocco 2 — Use Case Submission. I campi non sono elencati uno per uno: la
+ * struttura del form (sezioni, campi, opzioni) vive in `config/block2Form.ts`
+ * e qui si conservano i valori indicizzati per id di campo, così aggiornare il
+ * template non richiede modifiche al modello dati né alle API.
+ */
+export type Block2FieldValue = string | string[];
+
+export type Block2Submission = {
+  values?: Record<string, Block2FieldValue>;
+  chatLog?: ChatMessage[];
+  updatedAt?: number;
+  completedAt?: number;
+};
+
+/**
  * Punto in cui il partecipante stava lavorando: salvato lato server insieme
  * alla submission così che il rientro (anche da un altro dispositivo) riapra
  * esattamente lo step/sottosezione dove ci si era interrotti.
+ * "UC" è il form del Blocco 2.
  */
 export type ParticipantProgress = {
-  tab: "A" | "B" | "C";
+  tab: "A" | "B" | "C" | "UC";
   stepBDimension?: StepBKey;
   updatedAt: number;
 };
@@ -100,6 +119,7 @@ export type Submission = {
   stepA?: StepASubmission;
   stepB?: StepBSubmission;
   stepC?: StepCSubmission;
+  block2?: Block2Submission;
   progress?: ParticipantProgress;
 };
 

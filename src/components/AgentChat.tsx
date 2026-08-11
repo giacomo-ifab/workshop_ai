@@ -1,17 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Send, Sparkles, CheckCircle2 } from "lucide-react";
 import { ChatMessage } from "@/lib/types";
 
+/** Handle per far partire una domanda dall'esterno (vedi Blocco 2: "Chiedi aiuto"). */
+export type AgentChatHandle = {
+  ask: (question: string) => void;
+};
+
 type AgentChatProps = {
   subsection: string;
-  context?: { selectedActivityLabels?: string[]; processoContext?: string };
+  context?: {
+    selectedActivityLabels?: string[];
+    processoContext?: string;
+    /** Blocco 2: sezione del form su cui il partecipante sta chiedendo aiuto. */
+    sectionLabel?: string;
+  };
   initialMessage: string;
   initialChatLog?: ChatMessage[];
   initiallyFinished?: boolean;
   onUpdate: (chatLog: ChatMessage[], finished: boolean) => void;
   disabled?: boolean;
+  ref?: Ref<AgentChatHandle>;
 };
 
 export default function AgentChat({
@@ -22,6 +33,7 @@ export default function AgentChat({
   initiallyFinished,
   onUpdate,
   disabled,
+  ref,
 }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(
     initialChatLog && initialChatLog.length > 0
@@ -32,12 +44,22 @@ export default function AgentChat({
   const [loading, setLoading] = useState(false);
   const [finished, setFinished] = useState(Boolean(initiallyFinished));
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useImperativeHandle(ref, () => ({
+    ask: (question: string) => {
+      setInput(question);
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      inputRef.current?.focus();
+    },
+  }));
 
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault();
@@ -81,7 +103,7 @@ export default function AgentChat({
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-ifab-border bg-white overflow-hidden">
+    <div ref={rootRef} className="flex flex-col rounded-xl border border-ifab-border bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-ifab-border bg-ifab-bg-soft">
         <Sparkles size={16} className="text-ifab-blue" />
         <span className="text-sm font-medium text-ifab-navy">Assistente AI</span>
@@ -117,6 +139,7 @@ export default function AgentChat({
 
       <form onSubmit={handleSend} className="flex gap-2 border-t border-ifab-border p-2.5">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}

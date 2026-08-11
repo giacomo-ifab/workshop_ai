@@ -1,6 +1,7 @@
 import { customAlphabet, nanoid } from "nanoid";
 import { getRedis, SESSION_TTL_SECONDS } from "./kv";
 import {
+  Block2Submission,
   DEFAULT_UNLOCKED_STEPS,
   Participant,
   ParticipantProgress,
@@ -259,6 +260,26 @@ export async function saveStepBAnswer(
   const redis = getRedis();
   const current = await getSubmission(code, participantId);
   current.stepB = { ...current.stepB, [dimension]: { ...current.stepB?.[dimension], ...data } };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+/**
+ * Blocco 2 — Use Case Submission. I valori dei campi si fondono per id, così un
+ * salvataggio parziale (autosalvataggio della bozza) non azzera il resto.
+ */
+export async function saveBlock2(
+  code: string,
+  participantId: string,
+  data: Block2Submission
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.block2 = {
+    ...current.block2,
+    ...data,
+    values: { ...current.block2?.values, ...data.values },
+  };
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }

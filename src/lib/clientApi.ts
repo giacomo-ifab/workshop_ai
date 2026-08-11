@@ -116,6 +116,17 @@ export function submitStepB(
   });
 }
 
+export function submitBlock2(
+  code: string,
+  participantId: string,
+  data: import("./types").Block2Submission
+) {
+  return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ participantId, part: "block2", data }),
+  });
+}
+
 export function saveProgress(code: string, participantId: string, progress: ParticipantProgress) {
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
     method: "POST",

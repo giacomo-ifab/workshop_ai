@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getFacilitatorFromCookies } from "@/lib/auth";
 import { setUnlockedStep } from "@/lib/session";
-import { UnlockedSteps } from "@/lib/types";
+import { DEFAULT_UNLOCKED_STEPS, UnlockedSteps } from "@/lib/types";
 
-const VALID_STEPS: (keyof UnlockedSteps)[] = ["A", "variabilita", "dati", "docStandard", "criteri", "C"];
+// Derivato dal modello: aggiungendo uno step (es. il Blocco 2) non serve
+// ricordarsi di aggiornare anche questa lista.
+const VALID_STEPS = Object.keys(DEFAULT_UNLOCKED_STEPS) as (keyof UnlockedSteps)[];
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const facilitator = await getFacilitatorFromCookies();

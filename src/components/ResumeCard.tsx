@@ -7,15 +7,17 @@ import { ApiError, resumeSession } from "@/lib/clientApi";
 import { clearStoredIdentity, readStoredIdentity } from "@/lib/participantStorage";
 import { Submission } from "@/lib/types";
 
-const TAB_LABELS: Record<"A" | "B" | "C", string> = {
+const TAB_LABELS: Record<"A" | "B" | "C" | "UC", string> = {
   A: "Step A · Identifica il processo",
   B: "Step B · Caratterizza il processo",
   C: "Step C · Output",
+  UC: "Blocco 2 · Use Case Submission",
 };
 
 function describeProgress(submission: Submission): string {
   const tab = submission.progress?.tab;
   if (tab) return TAB_LABELS[tab];
+  if (submission.block2?.updatedAt) return TAB_LABELS.UC;
   if (submission.stepC?.sintesi) return TAB_LABELS.C;
   if (submission.stepB && Object.keys(submission.stepB).length > 0) return TAB_LABELS.B;
   return TAB_LABELS.A;
