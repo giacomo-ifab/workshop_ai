@@ -1,0 +1,172 @@
+import { customAlphabet, nanoid } from "nanoid";
+import { getRedis, SESSION_TTL_SECONDS } from "./kv";
+import {
+  DEFAULT_UNLOCKED_STEPS,
+  Participant,
+  SessionMeta,
+  StepASubmission,
+  StepBKey,
+  StepBSubmission,
+  StepCSubmission,
+  Submission,
+  UnlockedSteps,
+} from "./types";
+
+// Alfabeto senza caratteri ambigui (niente 0/O, 1/I/L) per i codici sessione
+// che il facilitatore detta a voce o scrive su una slide.
+const generateCode = customAlphabet("ABCDEFGHJKMNPQRSTUVWXYZ23456789", 6);
+
+function keyMeta(code: string) {
+  return `session:${code}:meta`;
+}
+function keyParticipants(code: string) {
+  return `session:${code}:participants`;
+}
+function keySubmission(code: string, participantId: string) {
+  return `session:${code}:submissions:${participantId}`;
+}
+
+export function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export async function createSession(facilitatorName: string): Promise<SessionMeta> {
+  const redis = getRedis();
+  let code = generateCode();
+  // Evita (improbabili) collisioni con sessioni ancora attive
+  for (let i = 0; i < 5 && (await redis.get(keyMeta(code))); i++) {
+    code = generateCode();
+  }
+
+  const meta: SessionMeta = {
+    code,
+    facilitatorName,
+    createdAt: Date.now(),
+    unlockedSteps: { ...DEFAULT_UNLOCKED_STEPS },
+  };
+
+  await redis.set(keyMeta(code), meta, { ex: SESSION_TTL_SECONDS });
+  await redis.set(keyParticipants(code), [], { ex: SESSION_TTL_SECONDS });
+  return meta;
+}
+
+export async function getSessionMeta(code: string): Promise<SessionMeta | null> {
+  const redis = getRedis();
+  const meta = await redis.get<SessionMeta>(keyMeta(code));
+  return meta ?? null;
+}
+
+export async function setUnlockedStep(
+  code: string,
+  step: keyof UnlockedSteps,
+  value: boolean
+): Promise<SessionMeta | null> {
+  const redis = getRedis();
+  const meta = await getSessionMeta(code);
+  if (!meta) return null;
+  meta.unlockedSteps[step] = value;
+  await redis.set(keyMeta(code), meta, { ex: SESSION_TTL_SECONDS });
+  return meta;
+}
+
+export async function getParticipants(code: string): Promise<Participant[]> {
+  const redis = getRedis();
+  const list = await redis.get<Participant[]>(keyParticipants(code));
+  return list ?? [];
+}
+
+/**
+ * Registra un partecipante alla sessione oppure, se un partecipante con lo
+ * stesso nome (normalizzato) esiste già in questa sessione, ne ripristina
+ * l'identità esistente: questo è il meccanismo di recupero dati al rientro
+ * (stessa sessione + stesso nome = stesso participantId = stesse submission).
+ */
+export async function joinOrResumeParticipant(
+  code: string,
+  displayName: string
+): Promise<{ participant: Participant; isNew: boolean }> {
+  const redis = getRedis();
+  const normalized = normalizeName(displayName);
+  const participants = await getParticipants(code);
+
+  const existing = participants.find((p) => p.normalizedName === normalized);
+  const now = Date.now();
+
+  if (existing) {
+    existing.lastSeenAt = now;
+    await redis.set(keyParticipants(code), participants, { ex: SESSION_TTL_SECONDS });
+    return { participant: existing, isNew: false };
+  }
+
+  const participant: Participant = {
+    participantId: nanoid(10),
+    name: displayName.trim(),
+    normalizedName: normalized,
+    joinedAt: now,
+    lastSeenAt: now,
+  };
+  participants.push(participant);
+  await redis.set(keyParticipants(code), participants, { ex: SESSION_TTL_SECONDS });
+  return { participant, isNew: true };
+}
+
+export async function touchParticipant(code: string, participantId: string): Promise<void> {
+  const redis = getRedis();
+  const participants = await getParticipants(code);
+  const p = participants.find((x) => x.participantId === participantId);
+  if (!p) return;
+  p.lastSeenAt = Date.now();
+  await redis.set(keyParticipants(code), participants, { ex: SESSION_TTL_SECONDS });
+}
+
+export async function getSubmission(code: string, participantId: string): Promise<Submission> {
+  const redis = getRedis();
+  const sub = await redis.get<Submission>(keySubmission(code, participantId));
+  return sub ?? { participantId };
+}
+
+export async function getAllSubmissions(code: string): Promise<Submission[]> {
+  const participants = await getParticipants(code);
+  const redis = getRedis();
+  if (participants.length === 0) return [];
+  const keys = participants.map((p) => keySubmission(code, p.participantId));
+  const results = await Promise.all(keys.map((k) => redis.get<Submission>(k)));
+  return results.map((sub, i) => sub ?? { participantId: participants[i].participantId });
+}
+
+export async function saveStepA(
+  code: string,
+  participantId: string,
+  data: StepASubmission
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.stepA = { ...current.stepA, ...data };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+export async function saveStepBAnswer(
+  code: string,
+  participantId: string,
+  dimension: StepBKey,
+  data: NonNullable<StepBSubmission[StepBKey]>
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.stepB = { ...current.stepB, [dimension]: { ...current.stepB?.[dimension], ...data } };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+export async function saveStepC(
+  code: string,
+  participantId: string,
+  data: StepCSubmission
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.stepC = { ...current.stepC, ...data };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
