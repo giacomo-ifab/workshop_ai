@@ -18,7 +18,7 @@ Scheda su una pagina che ricalca il template `Workshop1_Template_Use_Case_Submis
 
 - Sezioni: 1.0 Problema/opportunità di business · 1.1 Soluzione proposta · 1.2 Obiettivi strategici · 1.3 Dati e contesto · 1.4 Impatto atteso · 1.5 Metriche di successo · 1.6 Valutazione etica preliminare · 1.7 Rischi, complessità e resistenze.
 - Campi liberi, scelte singole e scelte multiple sono descritti in `src/config/block2Form.ts`: modificare lì testi, opzioni o suggerimenti aggiorna form, prompt dell'agente e conteggi, senza toccare componenti o API.
-- **Agente di supporto**: chat in fondo alla scheda (`subsection: "block2"`), più un pulsante "Chiedi aiuto" per sezione che precompila la domanda. A differenza degli agenti del Blocco 1 non conduce un'intervista: spiega i campi, aiuta a rendere concrete le risposte e a stimare i valori, senza compilare al posto del partecipante né inventare cifre.
+- **Agente di supporto**: chat nel pannello fisso a destra (`subsection: "block2"`), più un pulsante "Chiedi aiuto" per sezione che precompila la domanda. A differenza degli agenti del Blocco 1 non conduce un'intervista: spiega i campi, aiuta a rendere concrete le risposte e a stimare i valori, senza compilare al posto del partecipante né inventare cifre.
 - La scheda si autosalva come bozza (come lo Step A) e si conferma con "Salva scheda"; la dashboard del facilitatore mostra ✅ per le schede consegnate e `n/N` per quelle ancora in bozza.
 
 ## Riprendere una sessione interrotta
@@ -76,7 +76,8 @@ src/
 │   └── api/                          # route handler (auth, sessione, agente AI, sintesi)
 │       ├── session/list              # sessioni attive: rientro del facilitatore
 │       └── session/[code]/resume     # rientro del partecipante con identità salvata
-├── components/                       # StepA, StepB, StepC, Block2Form, AgentChat, ResumeCard
+├── components/                       # StepA, StepB, StepC, Block2Form, AgentChat,
+│                                     # AssistantPanel (pannello fisso a destra), ResumeCard
 ├── config/block1Flow.ts              # contenuto del Blocco 1 (attività, domande guida, prompt)
 ├── config/block2Form.ts              # scheda Use Case del Blocco 2 (sezioni, campi, prompt agente)
 └── lib/                              # tipi, client Redis, helper sessione, auth, client API,

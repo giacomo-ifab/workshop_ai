@@ -214,7 +214,9 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
   ];
 
   return (
-    <div className="min-h-screen bg-ifab-bg">
+    // Quando il pannello dell'assistente è aperto (Step A e scheda Use Case),
+    // da lg in su la pagina si restringe per non finirgli sotto.
+    <div className="min-h-screen bg-ifab-bg transition-[padding] lg:has-[aside[data-assistant=open]]:pr-[380px]">
       <header className="border-b border-ifab-border bg-white px-4 py-3 sm:px-8">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <div>

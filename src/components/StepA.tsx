@@ -7,6 +7,7 @@ import { ChatMessage, StepASubmission } from "@/lib/types";
 import { submitStepA } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
 import AgentChat from "./AgentChat";
+import AssistantPanel from "./AssistantPanel";
 
 const ALL_ACTIVITIES = CATEGORIES.flatMap((c) => c.activities);
 
@@ -206,7 +207,7 @@ export default function StepA({
       <section className="rounded-xl border border-ifab-border bg-white p-4">
         <h2 className="mb-1 text-lg font-semibold text-ifab-navy">A2 · Descrivi il processo</h2>
         <p className="mb-4 text-sm text-ifab-text-muted">
-          Usa l&apos;assistente qui sotto se hai dubbi su come rispondere, poi compila i campi.
+          Usa l&apos;assistente nel pannello a destra se hai dubbi su come rispondere, poi compila i campi.
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -323,8 +324,9 @@ export default function StepA({
           </div>
         </div>
 
-        <div className="mt-4">
+        <AssistantPanel title="Assistente AI" subtitle="Supporto alla descrizione del processo">
           <AgentChat
+            variant="panel"
             subsection="stepA"
             context={{ selectedActivityLabels: selectedLabels }}
             initialMessage={INITIAL_MESSAGE_STEP_A}
@@ -332,7 +334,7 @@ export default function StepA({
             onUpdate={handleChatUpdate}
             disabled={locked}
           />
-        </div>
+        </AssistantPanel>
 
         <div className="mt-4 flex items-center gap-3">
           <button

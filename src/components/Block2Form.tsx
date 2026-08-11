@@ -12,6 +12,7 @@ import { Block2FieldValue, Block2Submission, ChatMessage, StepASubmission } from
 import { submitBlock2 } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
 import AgentChat, { AgentChatHandle } from "./AgentChat";
+import AssistantPanel from "./AssistantPanel";
 
 const TOTAL_FIELDS = BLOCK2_SECTIONS.reduce((n, s) => n + s.fields.length, 0);
 
@@ -206,7 +207,7 @@ export default function Block2Form({
       <div>
         <h2 className="mb-1 text-lg font-semibold text-ifab-navy">Blocco 2 · Use Case Submission</h2>
         <p className="text-sm text-ifab-text-muted">
-          Descrivi il caso d&apos;uso che vuoi portare avanti. Usa l&apos;assistente in fondo alla pagina (o il
+          Descrivi il caso d&apos;uso che vuoi portare avanti. Usa l&apos;assistente nel pannello a destra (o il
           pulsante &quot;Chiedi aiuto&quot; di ogni sezione) se un campo non ti è chiaro.
         </p>
         <p className="mt-2 text-xs text-ifab-text-muted">
@@ -241,17 +242,17 @@ export default function Block2Form({
         </section>
       ))}
 
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-ifab-navy">Assistente alla compilazione</h3>
+      <AssistantPanel title="Assistente AI" subtitle="Supporto alla compilazione della scheda">
         <AgentChat
           ref={chatRef}
+          variant="panel"
           subsection="block2"
           context={{ processoContext, sectionLabel }}
           initialMessage={INITIAL_MESSAGE_BLOCK2}
           initialChatLog={chatLog}
           onUpdate={handleChatUpdate}
         />
-      </div>
+      </AssistantPanel>
 
       <div className="flex items-center gap-3">
         <button

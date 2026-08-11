@@ -22,6 +22,12 @@ type AgentChatProps = {
   initiallyFinished?: boolean;
   onUpdate: (chatLog: ChatMessage[], finished: boolean) => void;
   disabled?: boolean;
+  /**
+   * "inline" (default): riquadro dentro il flusso della pagina, con altezza
+   * massima propria. "panel": riempie il contenitore, per il pannello laterale
+   * fisso che affianca i form.
+   */
+  variant?: "inline" | "panel";
   ref?: Ref<AgentChatHandle>;
 };
 
@@ -33,8 +39,10 @@ export default function AgentChat({
   initiallyFinished,
   onUpdate,
   disabled,
+  variant = "inline",
   ref,
 }: AgentChatProps) {
+  const isPanel = variant === "panel";
   const [messages, setMessages] = useState<ChatMessage[]>(
     initialChatLog && initialChatLog.length > 0
       ? initialChatLog
@@ -103,7 +111,12 @@ export default function AgentChat({
   }
 
   return (
-    <div ref={rootRef} className="flex flex-col rounded-xl border border-ifab-border bg-white overflow-hidden">
+    <div
+      ref={rootRef}
+      className={`flex min-h-0 flex-col overflow-hidden bg-white ${
+        isPanel ? "h-full" : "rounded-xl border border-ifab-border"
+      }`}
+    >
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-ifab-border bg-ifab-bg-soft">
         <Sparkles size={16} className="text-ifab-blue" />
         <span className="text-sm font-medium text-ifab-navy">Assistente AI</span>
@@ -114,7 +127,12 @@ export default function AgentChat({
         )}
       </div>
 
-      <div ref={containerRef} className="ifab-scrollbar flex flex-col gap-2 px-4 py-3 max-h-72 overflow-y-auto">
+      <div
+        ref={containerRef}
+        className={`ifab-scrollbar flex flex-col gap-2 overflow-y-auto px-4 py-3 ${
+          isPanel ? "min-h-0 flex-1" : "max-h-72"
+        }`}
+      >
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
