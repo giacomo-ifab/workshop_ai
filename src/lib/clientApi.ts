@@ -72,6 +72,10 @@ export function resumeSession(code: string, participantId: string) {
   });
 }
 
+export function deleteSession(code: string) {
+  return jsonFetch<{ ok: true; code: string }>(`/api/session/${code}`, { method: "DELETE" });
+}
+
 export function listSessions() {
   return jsonFetch<{ sessions: import("./types").SessionSummary[] }>("/api/session/list");
 }

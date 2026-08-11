@@ -3,8 +3,15 @@
 import { startTransition, use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Lock, LockOpen, LogOut, Users, Copy, FileDown } from "lucide-react";
-import { facilitatorMe, facilitatorLogout, fetchState, fetchAggregate, unlockStep } from "@/lib/clientApi";
+import { Lock, LockOpen, LogOut, Users, Copy, FileDown, Trash2 } from "lucide-react";
+import {
+  facilitatorMe,
+  facilitatorLogout,
+  fetchState,
+  fetchAggregate,
+  unlockStep,
+  deleteSession,
+} from "@/lib/clientApi";
 import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
 import { CATEGORIES, STEP_B_CONFIG } from "@/config/block1Flow";
 import { Participant, Submission, StepBKey, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
@@ -30,6 +37,9 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
   const [rows, setRows] = useState<{ participant: Participant; submission: Submission }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sessionMissing, setSessionMissing] = useState(false);
+  // Eliminazione in due passaggi: cancella dati di tutti i partecipanti.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,6 +94,19 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
     router.replace("/facilitator/login");
   }
 
+  async function handleDeleteSession() {
+    setDeleting(true);
+    try {
+      await deleteSession(code);
+      clearFacilitatorCode();
+      router.replace("/facilitator/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore nell'eliminazione della sessione");
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   function copyJoinLink() {
     const url = `${window.location.origin}/join?code=${code}`;
     navigator.clipboard.writeText(url);
@@ -129,6 +152,31 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
             >
               <Copy size={15} /> Codice: <span className="font-mono tracking-widest">{code}</span>
             </button>
+            {confirmDelete ? (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={handleDeleteSession}
+                  disabled={deleting}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                >
+                  {deleting ? "Elimino..." : "Conferma eliminazione"}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-lg px-2 py-2 text-sm text-white/70 transition hover:text-white"
+                >
+                  Annulla
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                title="Elimina la sessione e tutti i dati dei partecipanti"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 transition hover:text-red-300"
+              >
+                <Trash2 size={15} /> Elimina
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 transition hover:text-white"

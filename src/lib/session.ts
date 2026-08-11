@@ -104,6 +104,36 @@ export async function listActiveSessions(): Promise<SessionSummary[]> {
   return summaries.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
+/**
+ * Cancella una sessione e tutto ciò che le appartiene (partecipanti e
+ * submission), oltre alla voce nell'indice. Serve al facilitatore per
+ * ripulire le sessioni di prova e chiudere quelle concluse: i dati non
+ * sopravvivono comunque al TTL, questa è solo la rimozione immediata.
+ */
+export async function deleteSession(code: string): Promise<boolean> {
+  const redis = getRedis();
+  const meta = await getSessionMeta(code);
+  const participants = await getParticipants(code);
+
+  const keys = [
+    keyMeta(code),
+    keyParticipants(code),
+    ...participants.map((p) => keySubmission(code, p.participantId)),
+  ];
+  await Promise.all(keys.map((k) => redis.del(k)));
+
+  const codes = (await redis.get<string[]>(keySessionIndex())) ?? [];
+  if (codes.includes(code)) {
+    await redis.set(
+      keySessionIndex(),
+      codes.filter((c) => c !== code),
+      { ex: SESSION_TTL_SECONDS }
+    );
+  }
+
+  return Boolean(meta);
+}
+
 export async function getSessionMeta(code: string): Promise<SessionMeta | null> {
   const redis = getRedis();
   const meta = await redis.get<SessionMeta>(keyMeta(code));

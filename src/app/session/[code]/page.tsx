@@ -111,6 +111,12 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
       setSubmission(data.ownSubmission ?? { participantId: identity.participantId });
       setLoadError(null);
     } catch (err) {
+      // Sessione eliminata dal facilitatore o scaduta mentre si lavorava:
+      // meglio riportare al form di ingresso che lasciare un errore secco.
+      if (err instanceof ApiError && err.status === 404) {
+        backToJoin();
+        return;
+      }
       setLoadError(err instanceof Error ? err.message : "Sessione non raggiungibile");
     }
   }, [code, identity, backToJoin]);

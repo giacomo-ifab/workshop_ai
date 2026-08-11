@@ -27,6 +27,7 @@ Tutto lo stato vive lato server (Redis, TTL 48h): chiudere il browser, ricaricar
 - Il cookie di autenticazione dura 12h: rientrando su `/facilitator/login` con il cookie valido si salta la password.
 - Dopo l'accesso viene mostrato l'**elenco delle sessioni ancora attive** (codice, orario, numero di partecipanti) per riprendere quella in corso; la sessione usata l'ultima volta su quel browser è marcata "ultima usata". Una nuova sessione si crea solo esplicitamente (o automaticamente se non ce n'è nessuna attiva).
 - Se il codice aperto non è più valido, la dashboard propone il ritorno al selettore delle sessioni.
+- Ogni sessione si può **eliminare** (icona cestino nel selettore, pulsante "Elimina" nella dashboard, con conferma in due passaggi): rimuove meta, partecipanti e submission. I partecipanti eventualmente collegati vengono riportati a `/join` al polling successivo.
 
 ## Setup locale
 

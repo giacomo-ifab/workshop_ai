@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Plus, RotateCcw, ShieldCheck, Users } from "lucide-react";
-import { createSession, facilitatorLogin, facilitatorLogout, facilitatorMe, listSessions } from "@/lib/clientApi";
-import { readFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
+import { LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import {
+  createSession,
+  deleteSession,
+  facilitatorLogin,
+  facilitatorLogout,
+  facilitatorMe,
+  listSessions,
+} from "@/lib/clientApi";
+import { clearFacilitatorCode, readFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
 import { SessionSummary } from "@/lib/types";
 
 function formatTime(ts: number): string {
@@ -26,6 +33,9 @@ export default function FacilitatorLoginPage() {
   const [phase, setPhase] = useState<"checking" | "login" | "picker">("checking");
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [lastCode, setLastCode] = useState<string | null>(null);
+  // Eliminazione in due passaggi: il primo clic chiede conferma sulla riga.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const enterSession = useCallback(
     (code: string) => {
@@ -111,6 +121,24 @@ export default function FacilitatorLoginPage() {
     }
   }
 
+  async function handleDelete(code: string) {
+    setDeleting(code);
+    setError(null);
+    try {
+      await deleteSession(code);
+      setSessions((prev) => prev.filter((s) => s.code !== code));
+      if (readFacilitatorCode() === code) {
+        clearFacilitatorCode();
+        setLastCode(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore nell'eliminazione della sessione");
+    } finally {
+      setDeleting(null);
+      setConfirmDelete(null);
+    }
+  }
+
   async function handleLogout() {
     await facilitatorLogout();
     setPhase("login");
@@ -141,32 +169,65 @@ export default function FacilitatorLoginPage() {
 
           <div className="flex flex-col gap-2">
             {sessions.map((s) => (
-              <button
+              <div
                 key={s.code}
-                type="button"
-                onClick={() => enterSession(s.code)}
-                className="flex items-center justify-between rounded-xl border border-ifab-border px-4 py-3 text-left transition hover:border-ifab-blue hover:bg-ifab-bg-soft"
+                className="flex items-center gap-2 rounded-xl border border-ifab-border px-4 py-3 transition hover:border-ifab-blue"
               >
-                <span>
-                  <span className="flex items-center gap-2 text-sm font-semibold text-ifab-navy">
-                    <span className="font-mono tracking-widest">{s.code}</span>
-                    {s.code === lastCode && (
-                      <span className="rounded-full bg-ifab-blue/10 px-2 py-0.5 text-[10px] font-medium text-ifab-blue">
-                        ultima usata
-                      </span>
-                    )}
+                <button
+                  type="button"
+                  onClick={() => enterSession(s.code)}
+                  className="flex flex-1 items-center justify-between gap-3 text-left"
+                >
+                  <span>
+                    <span className="flex items-center gap-2 text-sm font-semibold text-ifab-navy">
+                      <span className="font-mono tracking-widest">{s.code}</span>
+                      {s.code === lastCode && (
+                        <span className="rounded-full bg-ifab-blue/10 px-2 py-0.5 text-[10px] font-medium text-ifab-blue">
+                          ultima usata
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-ifab-text-muted">
+                      Creata il {formatTime(s.createdAt)} · ultima attività {formatTime(s.lastActivityAt)}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-ifab-text-muted">
-                    Creata il {formatTime(s.createdAt)} · ultima attività {formatTime(s.lastActivityAt)}
+                  <span className="flex items-center gap-3 text-xs text-ifab-text-muted">
+                    <span className="flex items-center gap-1">
+                      <Users size={13} /> {s.participantCount}
+                    </span>
+                    <RotateCcw size={16} className="text-ifab-blue" />
                   </span>
-                </span>
-                <span className="flex items-center gap-3 text-xs text-ifab-text-muted">
+                </button>
+
+                {confirmDelete === s.code ? (
                   <span className="flex items-center gap-1">
-                    <Users size={13} /> {s.participantCount}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(s.code)}
+                      disabled={deleting === s.code}
+                      className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                    >
+                      {deleting === s.code ? "Elimino..." : "Elimina"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(null)}
+                      className="rounded-lg px-2 py-1.5 text-xs text-ifab-text-muted transition hover:text-ifab-navy"
+                    >
+                      Annulla
+                    </button>
                   </span>
-                  <RotateCcw size={16} className="text-ifab-blue" />
-                </span>
-              </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(s.code)}
+                    title="Elimina sessione e tutti i suoi dati"
+                    className="rounded-lg p-2 text-ifab-text-muted transition hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
             ))}
 
             {sessions.length === 0 && (
@@ -175,6 +236,12 @@ export default function FacilitatorLoginPage() {
               </p>
             )}
           </div>
+
+          {sessions.length > 0 && (
+            <p className="mt-3 text-xs text-ifab-text-muted">
+              L&apos;eliminazione rimuove la sessione e tutti i dati dei suoi partecipanti: non è reversibile.
+            </p>
+          )}
 
           <button
             type="button"
