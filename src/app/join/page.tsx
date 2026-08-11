@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { joinSession } from "@/lib/clientApi";
-import { Users } from "lucide-react";
+import { ApiError, joinSession, resumeSession } from "@/lib/clientApi";
+import { clearStoredIdentity, readStoredIdentity, saveStoredIdentity } from "@/lib/participantStorage";
+import { RotateCcw, Users } from "lucide-react";
 
 function JoinForm() {
   const router = useRouter();
@@ -12,6 +13,63 @@ function JoinForm() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resumable, setResumable] = useState<{ code: string; participantId: string; name: string } | null>(null);
+
+  // Motivo per cui si è stati rimandati qui da /session/[code] (identità non più valida).
+  const expired = searchParams.get("expired") === "1";
+
+  useEffect(() => {
+    const identity = readStoredIdentity();
+    if (!identity) return;
+
+    // Anche senza sessione riprendibile, riproporre codice e nome evita di
+    // ridigitarli: il rientro per nome recupera comunque i dati già inseriti.
+    const prefill = (withCode: boolean) => {
+      if (withCode) setCode((prev) => prev || identity.code);
+      setName((prev) => prev || identity.name);
+    };
+
+    let cancelled = false;
+    resumeSession(identity.code, identity.participantId)
+      .then(() => {
+        if (cancelled) return;
+        prefill(true);
+        setResumable(identity);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // Identità non più valida lato server: si riparte da codice + nome, ma
+        // il nome resta precompilato (serve per ritrovare i propri dati).
+        if (err instanceof ApiError && err.status === 404) {
+          clearStoredIdentity();
+          prefill(false);
+          return;
+        }
+        prefill(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleResume() {
+    if (!resumable) return;
+    setLoading(true);
+    try {
+      await resumeSession(resumable.code, resumable.participantId);
+      saveStoredIdentity(resumable);
+      router.push(`/session/${resumable.code}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        clearStoredIdentity();
+        setResumable(null);
+      }
+      setError(err instanceof Error ? err.message : "Sessione non più disponibile");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,10 +82,11 @@ function JoinForm() {
     try {
       const normalizedCode = code.trim().toUpperCase();
       const { participant } = await joinSession(normalizedCode, name.trim());
-      localStorage.setItem(
-        "ifab_ws_participant",
-        JSON.stringify({ code: normalizedCode, participantId: participant.participantId, name: participant.name })
-      );
+      saveStoredIdentity({
+        code: normalizedCode,
+        participantId: participant.participantId,
+        name: participant.name,
+      });
       router.push(`/session/${normalizedCode}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore imprevisto");
@@ -48,6 +107,41 @@ function JoinForm() {
             Inserisci il codice sessione fornito dal facilitatore e il tuo nome per partecipare.
           </p>
         </div>
+
+        {expired && !resumable && (
+          <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            La sessione precedente non è più attiva. Rientra con il codice e lo stesso nome: se la sessione è
+            ancora aperta ritroverai i dati già inseriti.
+          </p>
+        )}
+
+        {resumable && (
+          <div className="mb-5 rounded-xl border border-ifab-blue/30 bg-ifab-blue/5 p-4">
+            <p className="text-sm font-semibold text-ifab-navy">Riprendi dove eri</p>
+            <p className="mt-0.5 text-xs text-ifab-text-muted">
+              {resumable.name} · sessione {resumable.code}
+            </p>
+            <button
+              type="button"
+              onClick={handleResume}
+              disabled={loading}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-ifab-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-ifab-blue-dark disabled:opacity-60"
+            >
+              <RotateCcw size={15} /> Rientra nella sessione
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                clearStoredIdentity();
+                setResumable(null);
+                setName("");
+              }}
+              className="mt-2 w-full text-center text-xs text-ifab-text-muted underline transition hover:text-ifab-navy"
+            >
+              Entra con un altro nome
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>

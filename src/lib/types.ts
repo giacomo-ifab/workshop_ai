@@ -63,6 +63,7 @@ export type StepASubmission = {
   fteFrequenza?: string;
   ftePersone?: string;
   chatLog?: ChatMessage[];
+  updatedAt?: number; // ultimo salvataggio automatico della bozza
   completedAt?: number;
 };
 
@@ -83,9 +84,30 @@ export type StepCSubmission = {
   generatedAt?: number;
 };
 
+/**
+ * Punto in cui il partecipante stava lavorando: salvato lato server insieme
+ * alla submission così che il rientro (anche da un altro dispositivo) riapra
+ * esattamente lo step/sottosezione dove ci si era interrotti.
+ */
+export type ParticipantProgress = {
+  tab: "A" | "B" | "C";
+  stepBDimension?: StepBKey;
+  updatedAt: number;
+};
+
 export type Submission = {
   participantId: string;
   stepA?: StepASubmission;
   stepB?: StepBSubmission;
   stepC?: StepCSubmission;
+  progress?: ParticipantProgress;
+};
+
+/** Riepilogo di una sessione attiva, mostrato al facilitatore che rientra. */
+export type SessionSummary = {
+  code: string;
+  facilitatorName: string;
+  createdAt: number;
+  participantCount: number;
+  lastActivityAt: number;
 };

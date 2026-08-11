@@ -10,7 +10,23 @@ Vedi il piano architetturale completo in `C:\Users\GaiaGambarelli\.claude\plans\
 - **Step B — Caratterizza il processo**: 4 sottosezioni (Variabilità, Dati, Documenti standard, Criteri e regole), attivate in base alle categorie selezionate in Step A, ciascuna con un agente AI che pone le domande guida.
 - **Step C — Output**: sintesi descrittiva generata dall'AI + visualizzazione radar del profilo del processo + export PDF. (Nessuna raccomandazione di approccio AI qui: arriverà a fine workshop.)
 
-Il facilitatore sblocca ogni step/sottosezione dalla propria dashboard; i partecipanti vedono lo sblocco entro pochi secondi (polling). Se un partecipante esce e rientra con lo stesso nome nella stessa sessione, ritrova i dati già inseriti.
+Il facilitatore sblocca ogni step/sottosezione dalla propria dashboard; i partecipanti vedono lo sblocco entro pochi secondi (polling).
+
+## Riprendere una sessione interrotta
+
+Tutto lo stato vive lato server (Redis, TTL 48h): chiudere il browser, ricaricare la pagina o cambiare dispositivo non fa perdere il lavoro.
+
+**Partecipante**
+- L'identità (codice sessione + participantId + nome) resta nel `localStorage`: riaprendo l'app compare in home la card **"Riprendi"**, e su `/join` il pulsante **"Rientra nella sessione"** — senza ridigitare nulla.
+- Da un altro dispositivo (o dopo aver svuotato il browser) basta rientrare su `/join` con lo **stesso codice e lo stesso nome**: il match sul nome normalizzato ricollega alla stessa submission.
+- I campi dello **Step A si autosalvano** dopo ~1 secondo di inattività (e all'uscita dallo step), quindi anche la bozza non ancora confermata con "Salva" viene ripristinata.
+- Viene ripristinato anche il **punto in cui ci si era interrotti** (tab A/B/C e sottosezione di Step B), salvato lato server a ogni cambio step.
+- Se la sessione è scaduta o il partecipante non risulta più registrato, si viene riportati a `/join` con un avviso, invece di restare su una pagina in caricamento.
+
+**Facilitatore**
+- Il cookie di autenticazione dura 12h: rientrando su `/facilitator/login` con il cookie valido si salta la password.
+- Dopo l'accesso viene mostrato l'**elenco delle sessioni ancora attive** (codice, orario, numero di partecipanti) per riprendere quella in corso; la sessione usata l'ultima volta su quel browser è marcata "ultima usata". Una nuova sessione si crea solo esplicitamente (o automaticamente se non ce n'è nessuna attiva).
+- Se il codice aperto non è più valido, la dashboard propone il ritorno al selettore delle sessioni.
 
 ## Setup locale
 
@@ -48,9 +64,12 @@ src/
 │   ├── facilitator/[code]/page.tsx   # dashboard facilitatore
 │   ├── session/[code]/page.tsx       # vista partecipante (Step A/B/C)
 │   └── api/                          # route handler (auth, sessione, agente AI, sintesi)
-├── components/                       # StepA, StepB, StepC, AgentChat
+│       ├── session/list              # sessioni attive: rientro del facilitatore
+│       └── session/[code]/resume     # rientro del partecipante con identità salvata
+├── components/                       # StepA, StepB, StepC, AgentChat, ResumeCard
 ├── config/block1Flow.ts              # contenuto del Blocco 1 (attività, domande guida, prompt)
-└── lib/                               # tipi, client Redis, helper sessione, auth, client API
+└── lib/                              # tipi, client Redis, helper sessione, auth, client API,
+                                      # participantStorage (identità salvata nel browser)
 ```
 
 ## Estendere ai blocchi successivi

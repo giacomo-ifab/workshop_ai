@@ -14,13 +14,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   const participants = await getParticipants(code);
 
   let ownSubmission = null;
-  if (participantId && participants.some((p) => p.participantId === participantId)) {
+  // participantValid distingue "non ho chiesto una submission" da "l'identità
+  // salvata nel browser non vale più": nel secondo caso il client rimanda a /join.
+  const participantValid = Boolean(
+    participantId && participants.some((p) => p.participantId === participantId)
+  );
+  if (participantId && participantValid) {
     await touchParticipant(code, participantId);
     ownSubmission = await getSubmission(code, participantId);
   }
 
   return NextResponse.json({
     meta,
+    participantValid,
     participants: participants.map((p) => ({
       name: p.name,
       joinedAt: p.joinedAt,

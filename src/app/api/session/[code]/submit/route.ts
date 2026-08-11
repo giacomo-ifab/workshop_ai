@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getParticipants, saveStepA, saveStepBAnswer, saveStepC } from "@/lib/session";
+import { getParticipants, saveProgress, saveStepA, saveStepBAnswer, saveStepC } from "@/lib/session";
 import { StepBKey } from "@/lib/types";
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -26,6 +26,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     submission = await saveStepBAnswer(code, participantId, dimension as StepBKey, data);
   } else if (part === "stepC") {
     submission = await saveStepC(code, participantId, data);
+  } else if (part === "progress") {
+    submission = await saveProgress(code, participantId, data);
   } else {
     return NextResponse.json({ error: "part non valido" }, { status: 400 });
   }

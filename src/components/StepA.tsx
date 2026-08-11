@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Save } from "lucide-react";
 import { CATEGORIES, AREE_FUNZIONALI, INITIAL_MESSAGE_STEP_A } from "@/config/block1Flow";
 import { ChatMessage, StepASubmission } from "@/lib/types";
@@ -39,9 +39,27 @@ export default function StepA({
   const [chatLog, setChatLog] = useState<ChatMessage[]>(initialData?.chatLog ?? []);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(initialData?.completedAt ?? null);
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved">(
+    initialData?.updatedAt || initialData?.completedAt ? "saved" : "idle"
+  );
+
+  // Salvataggio automatico della bozza: senza questo, chiudere il browser prima
+  // di premere "Salva" farebbe perdere tutto quanto scritto, e il rientro nella
+  // sessione ripartirebbe da campi vuoti.
+  const dirtyRef = useRef(false);
+  const pendingDraftRef = useRef<StepASubmission | null>(null);
+  // onSaved è una closure nuova a ogni render del genitore: passandola per ref
+  // il timer di autosalvataggio non viene riavviato dai render del polling.
+  const onSavedRef = useRef(onSaved);
+
+  function markDirty() {
+    dirtyRef.current = true;
+    setDraftState("idle");
+  }
 
   function toggleActivity(key: string) {
     if (locked) return;
+    markDirty();
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
@@ -64,11 +82,77 @@ export default function StepA({
     return data;
   }
 
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  });
+
+  useEffect(() => {
+    if (locked) return;
+    const draft: StepASubmission = {
+      dipartimento,
+      areaFunzionale,
+      attivitaSelezionate: selected,
+      processo,
+      attivitaStrumenti,
+      descrizione,
+      fteDurata,
+      fteFrequenza,
+      ftePersone,
+      chatLog,
+    };
+    pendingDraftRef.current = draft;
+    if (!dirtyRef.current) return;
+
+    const timer = setTimeout(async () => {
+      dirtyRef.current = false;
+      setDraftState("saving");
+      try {
+        const data: StepASubmission = { ...draft, updatedAt: nowMs() };
+        await submitStepA(code, participantId, data);
+        onSavedRef.current(data);
+        setDraftState("saved");
+      } catch {
+        // Riproveremo alla modifica successiva: la bozza resta comunque a schermo.
+        dirtyRef.current = true;
+        setDraftState("idle");
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [
+    locked,
+    dipartimento,
+    areaFunzionale,
+    selected,
+    processo,
+    attivitaStrumenti,
+    descrizione,
+    fteDurata,
+    fteFrequenza,
+    ftePersone,
+    chatLog,
+    code,
+    participantId,
+  ]);
+
+  // Uscita dallo step (cambio tab): la bozza in attesa del timer viene salvata
+  // subito, così al rientro non manca l'ultima riga scritta.
+  useEffect(() => {
+    return () => {
+      const draft = pendingDraftRef.current;
+      if (!dirtyRef.current || !draft) return;
+      dirtyRef.current = false;
+      void submitStepA(code, participantId, { ...draft, updatedAt: nowMs() });
+    };
+  }, [code, participantId]);
+
   async function handleSave() {
     setSaving(true);
     try {
-      await persist({ completedAt: nowMs() });
+      dirtyRef.current = false;
+      await persist({ updatedAt: nowMs(), completedAt: nowMs() });
       setSavedAt(nowMs());
+      setDraftState("saved");
     } finally {
       setSaving(false);
     }
@@ -131,7 +215,10 @@ export default function StepA({
             <input
               disabled={locked}
               value={dipartimento}
-              onChange={(e) => setDipartimento(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setDipartimento(e.target.value);
+              }}
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
           </div>
@@ -140,7 +227,10 @@ export default function StepA({
             <select
               disabled={locked}
               value={areaFunzionale}
-              onChange={(e) => setAreaFunzionale(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setAreaFunzionale(e.target.value);
+              }}
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             >
               <option value="">Seleziona...</option>
@@ -156,7 +246,10 @@ export default function StepA({
             <input
               disabled={locked}
               value={processo}
-              onChange={(e) => setProcesso(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setProcesso(e.target.value);
+              }}
               placeholder="Es. Controllo qualità visivo a fine linea"
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -168,7 +261,10 @@ export default function StepA({
             <textarea
               disabled={locked}
               value={attivitaStrumenti}
-              onChange={(e) => setAttivitaStrumenti(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setAttivitaStrumenti(e.target.value);
+              }}
               rows={2}
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -178,7 +274,10 @@ export default function StepA({
             <textarea
               disabled={locked}
               value={descrizione}
-              onChange={(e) => setDescrizione(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setDescrizione(e.target.value);
+              }}
               rows={3}
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -188,7 +287,10 @@ export default function StepA({
             <input
               disabled={locked}
               value={fteDurata}
-              onChange={(e) => setFteDurata(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setFteDurata(e.target.value);
+              }}
               placeholder="Es. 20 min"
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -198,7 +300,10 @@ export default function StepA({
             <input
               disabled={locked}
               value={fteFrequenza}
-              onChange={(e) => setFteFrequenza(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setFteFrequenza(e.target.value);
+              }}
               placeholder="Es. 30 volte/giorno"
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -208,7 +313,10 @@ export default function StepA({
             <input
               disabled={locked}
               value={ftePersone}
-              onChange={(e) => setFtePersone(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setFtePersone(e.target.value);
+              }}
               placeholder="Es. 3"
               className="w-full rounded-lg border border-ifab-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ifab-blue disabled:bg-ifab-bg-soft"
             />
@@ -238,6 +346,11 @@ export default function StepA({
           {savedAt && (
             <span className="flex items-center gap-1 text-xs text-emerald-600">
               <CheckCircle2 size={14} /> Salvato
+            </span>
+          )}
+          {!savedAt && draftState !== "idle" && (
+            <span className="text-xs text-ifab-text-muted">
+              {draftState === "saving" ? "Salvataggio bozza..." : "Bozza salvata — la ritrovi al rientro"}
             </span>
           )}
         </div>

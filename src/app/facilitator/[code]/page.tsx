@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Lock, LockOpen, LogOut, Users, Copy, FileDown } from "lucide-react";
 import { facilitatorMe, facilitatorLogout, fetchState, fetchAggregate, unlockStep } from "@/lib/clientApi";
+import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
 import { CATEGORIES, STEP_B_CONFIG } from "@/config/block1Flow";
 import { Participant, Submission, StepBKey, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 
@@ -28,6 +29,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [rows, setRows] = useState<{ participant: Participant; submission: Submission }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sessionMissing, setSessionMissing] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,9 +38,12 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
         if (!me.authenticated) throw new Error("not-auth");
         setFacilitatorName(me.name);
         setAuthChecked(true);
+        // Sessione effettivamente aperta: diventa quella proposta al prossimo rientro,
+        // anche se ci si è arrivati da un link invece che dal selettore.
+        saveFacilitatorCode(code);
       })
       .catch(() => router.replace("/facilitator/login"));
-  }, [router]);
+  }, [router, code]);
 
   const poll = useCallback(async () => {
     try {
@@ -48,8 +53,13 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
       setParticipants(agg.rows.map((r) => r.participant));
       setRows(agg.rows);
       setError(null);
+      setSessionMissing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Errore di caricamento");
+      const message = err instanceof Error ? err.message : "Errore di caricamento";
+      // Sessione scaduta o codice non più valido: da qui si torna al selettore
+      // invece di restare su una dashboard che non aggiornerà mai nulla.
+      setSessionMissing(/non valido|scadut/i.test(message));
+      setError(message);
     }
   }, [code]);
 
@@ -70,7 +80,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
 
   async function handleLogout() {
     await facilitatorLogout();
-    localStorage.removeItem("ifab_ws_facilitator_code");
+    clearFacilitatorCode();
     router.replace("/facilitator/login");
   }
 
@@ -130,7 +140,22 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
-        {error && <p className="mb-4 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700">
+            <span>{error}</span>
+            {sessionMissing && (
+              <button
+                onClick={() => {
+                  clearFacilitatorCode();
+                  router.replace("/facilitator/login");
+                }}
+                className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-800"
+              >
+                Scegli un&apos;altra sessione
+              </button>
+            )}
+          </div>
+        )}
 
         <section className="mb-6 rounded-xl bg-white p-5">
           <h2 className="mb-3 text-sm font-semibold text-ifab-navy">Sblocca gli step</h2>

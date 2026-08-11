@@ -14,6 +14,8 @@ export default function StepB({
   stepA,
   stepB,
   unlockedSteps,
+  initialDimension,
+  onDimensionChange,
   onSaved,
 }: {
   code: string;
@@ -21,6 +23,9 @@ export default function StepB({
   stepA?: StepASubmission;
   stepB?: StepBSubmission;
   unlockedSteps: UnlockedSteps;
+  /** Sottosezione su cui il partecipante si era interrotto, ripristinata al rientro. */
+  initialDimension?: StepBKey;
+  onDimensionChange?: (dimension: StepBKey) => void;
   onSaved: (dimension: StepBKey, data: NonNullable<StepBSubmission[StepBKey]>) => void;
 }) {
   const relevantDimensions = useMemo(() => {
@@ -31,7 +36,19 @@ export default function StepB({
     return dims.length > 0 ? dims : (Object.keys(STEP_B_CONFIG) as StepBKey[]);
   }, [stepA]);
 
-  const [active, setActive] = useState<StepBKey>(relevantDimensions[0] ?? "variabilita");
+  // Al rientro si riapre la sottosezione dove ci si era interrotti, purché sia
+  // ancora fra quelle pertinenti e sbloccate; altrimenti la prima disponibile.
+  const [active, setActive] = useState<StepBKey>(() => {
+    if (initialDimension && relevantDimensions.includes(initialDimension) && unlockedSteps[initialDimension]) {
+      return initialDimension;
+    }
+    return relevantDimensions.find((dim) => unlockedSteps[dim]) ?? relevantDimensions[0] ?? "variabilita";
+  });
+
+  function selectDimension(dimension: StepBKey) {
+    setActive(dimension);
+    onDimensionChange?.(dimension);
+  }
 
   const processoContext = [stepA?.processo, stepA?.descrizione].filter(Boolean).join(" — ");
 
@@ -59,7 +76,7 @@ export default function StepB({
             <button
               key={dim}
               type="button"
-              onClick={() => unlocked && setActive(dim)}
+              onClick={() => unlocked && selectDimension(dim)}
               disabled={!unlocked}
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 active === dim && unlocked

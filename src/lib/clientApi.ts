@@ -1,13 +1,30 @@
-import { Submission, StepBKey } from "./types";
+import { ParticipantProgress, Submission, StepBKey } from "./types";
+
+/**
+ * Errore con lo status HTTP: serve a distinguere "sessione/partecipante non
+ * esistono più" (404 → torna al form di ingresso) da un problema di rete
+ * temporaneo (→ si riprova, senza buttare fuori nessuno).
+ */
+export class ApiError extends Error {
+  status: number;
+  reason?: string;
+
+  constructor(message: string, status: number, reason?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.reason = reason;
+  }
+}
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error ?? `Errore ${res.status}`);
+    throw new ApiError(data.error ?? `Errore ${res.status}`, res.status, data.reason);
   }
   return data as T;
 }
@@ -43,11 +60,28 @@ export function joinSession(code: string, name: string) {
   });
 }
 
+/** Rientro con l'identità già salvata nel browser: nessun codice/nome da riscrivere. */
+export function resumeSession(code: string, participantId: string) {
+  return jsonFetch<{
+    participant: import("./types").Participant;
+    submission: Submission;
+    meta: import("./types").SessionMeta;
+  }>(`/api/session/${code}/resume`, {
+    method: "POST",
+    body: JSON.stringify({ participantId }),
+  });
+}
+
+export function listSessions() {
+  return jsonFetch<{ sessions: import("./types").SessionSummary[] }>("/api/session/list");
+}
+
 export function fetchState(code: string, participantId?: string) {
   const qs = participantId ? `?participantId=${encodeURIComponent(participantId)}` : "";
   return jsonFetch<{
     meta: import("./types").SessionMeta;
     participants: { name: string; joinedAt: number; lastSeenAt: number }[];
+    participantValid: boolean;
     ownSubmission: Submission | null;
   }>(`/api/session/${code}/state${qs}`);
 }
@@ -75,6 +109,13 @@ export function submitStepB(
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
     method: "POST",
     body: JSON.stringify({ participantId, part: "stepB", dimension, data }),
+  });
+}
+
+export function saveProgress(code: string, participantId: string, progress: ParticipantProgress) {
+  return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ participantId, part: "progress", data: progress }),
   });
 }
 

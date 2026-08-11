@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Users, ShieldCheck } from "lucide-react";
+import ResumeCard from "@/components/ResumeCard";
 
 export default function Home() {
   return (
@@ -10,6 +11,8 @@ export default function Home() {
         <p className="mt-3 text-sm text-ifab-text-muted">
           Blocco 1 — Identificazione Opportunità: scopri e caratterizza i processi candidati all&apos;adozione dell&apos;AI.
         </p>
+
+        <ResumeCard />
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
           <Link

@@ -3,7 +3,9 @@ import { getRedis, SESSION_TTL_SECONDS } from "./kv";
 import {
   DEFAULT_UNLOCKED_STEPS,
   Participant,
+  ParticipantProgress,
   SessionMeta,
+  SessionSummary,
   StepASubmission,
   StepBKey,
   StepBSubmission,
@@ -24,6 +26,23 @@ function keyParticipants(code: string) {
 }
 function keySubmission(code: string, participantId: string) {
   return `session:${code}:submissions:${participantId}`;
+}
+// Indice dei codici sessione creati: serve al facilitatore che rientra da un
+// browser diverso (o dopo aver svuotato il localStorage) per ritrovare e
+// riprendere la sessione già in corso invece di crearne una nuova.
+function keySessionIndex() {
+  return `sessions:index`;
+}
+
+// Quante sessioni tenere nell'indice: un facilitatore ne apre poche per evento,
+// il tetto serve solo a evitare che la chiave cresca senza limite.
+const SESSION_INDEX_MAX = 50;
+
+async function addToSessionIndex(code: string): Promise<void> {
+  const redis = getRedis();
+  const codes = (await redis.get<string[]>(keySessionIndex())) ?? [];
+  const next = [code, ...codes.filter((c) => c !== code)].slice(0, SESSION_INDEX_MAX);
+  await redis.set(keySessionIndex(), next, { ex: SESSION_TTL_SECONDS });
 }
 
 export function normalizeName(name: string): string {
@@ -47,7 +66,42 @@ export async function createSession(facilitatorName: string): Promise<SessionMet
 
   await redis.set(keyMeta(code), meta, { ex: SESSION_TTL_SECONDS });
   await redis.set(keyParticipants(code), [], { ex: SESSION_TTL_SECONDS });
+  await addToSessionIndex(code);
   return meta;
+}
+
+/**
+ * Sessioni ancora vive (meta non scaduta), più recenti prima. Ripulisce
+ * l'indice dai codici la cui meta è nel frattempo scaduta.
+ */
+export async function listActiveSessions(): Promise<SessionSummary[]> {
+  const redis = getRedis();
+  const codes = (await redis.get<string[]>(keySessionIndex())) ?? [];
+  if (codes.length === 0) return [];
+
+  const summaries: SessionSummary[] = [];
+  const stillAlive: string[] = [];
+
+  for (const code of codes) {
+    const meta = await getSessionMeta(code);
+    if (!meta) continue;
+    stillAlive.push(code);
+    const participants = await getParticipants(code);
+    const lastActivityAt = participants.reduce((max, p) => Math.max(max, p.lastSeenAt), meta.createdAt);
+    summaries.push({
+      code: meta.code,
+      facilitatorName: meta.facilitatorName,
+      createdAt: meta.createdAt,
+      participantCount: participants.length,
+      lastActivityAt,
+    });
+  }
+
+  if (stillAlive.length !== codes.length) {
+    await redis.set(keySessionIndex(), stillAlive, { ex: SESSION_TTL_SECONDS });
+  }
+
+  return summaries.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
 export async function getSessionMeta(code: string): Promise<SessionMeta | null> {
@@ -110,6 +164,26 @@ export async function joinOrResumeParticipant(
   return { participant, isNew: true };
 }
 
+/**
+ * Ripristina l'identità a partire dal solo participantId salvato nel browser:
+ * è la via di rientro "senza riscrivere nulla" (stesso dispositivo, sessione
+ * ancora attiva). Ritorna null se la sessione è scaduta o se quel partecipante
+ * non risulta più registrato: in quel caso il client torna al form di /join.
+ */
+export async function resumeParticipantById(
+  code: string,
+  participantId: string
+): Promise<Participant | null> {
+  const redis = getRedis();
+  const participants = await getParticipants(code);
+  const participant = participants.find((p) => p.participantId === participantId);
+  if (!participant) return null;
+
+  participant.lastSeenAt = Date.now();
+  await redis.set(keyParticipants(code), participants, { ex: SESSION_TTL_SECONDS });
+  return participant;
+}
+
 export async function touchParticipant(code: string, participantId: string): Promise<void> {
   const redis = getRedis();
   const participants = await getParticipants(code);
@@ -155,6 +229,19 @@ export async function saveStepBAnswer(
   const redis = getRedis();
   const current = await getSubmission(code, participantId);
   current.stepB = { ...current.stepB, [dimension]: { ...current.stepB?.[dimension], ...data } };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+/** Memorizza lo step su cui il partecipante stava lavorando (vedi ParticipantProgress). */
+export async function saveProgress(
+  code: string,
+  participantId: string,
+  progress: ParticipantProgress
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.progress = progress;
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }
