@@ -1,13 +1,26 @@
-// Tipi condivisi per il modello dati del workshop (Blocco 1 — Identificazione Opportunità)
+// Tipi condivisi per il modello dati del workshop.
+// Blocco 1 — Identificazione Opportunità, in 4 step:
+//   1. selezione delle attività svolte
+//   2. stima del tempo assorbito (durata × frequenza × persone) e top 3
+//   3. caratteristiche delle attività più onerose (una caratteristica per gruppo)
+//   4. output: sintesi AI, profilo e PDF
+// Blocco 2 — Use Case Submission (form su una pagina).
 
+/** Gruppo di attività: a ogni gruppo corrisponde una sola caratteristica da indagare. */
 export type CategoryKey = "ripetitive" | "analisiDati" | "documentazione" | "decisioni";
 
-export type StepBKey = "variabilita" | "dati" | "docStandard" | "criteri";
+/** Caratteristica indagata nello Step 3. */
+export type CharacteristicKey = "variabilita" | "dati" | "docStandard" | "criteri";
 
-export const STEP_B_KEYS: StepBKey[] = ["variabilita", "dati", "docStandard", "criteri"];
+export const CHARACTERISTIC_KEYS: CharacteristicKey[] = [
+  "variabilita",
+  "dati",
+  "docStandard",
+  "criteri",
+];
 
-// Mappa 1:1 tra categoria selezionata in Step A e sottosezione di Step B da attivare
-export const CATEGORY_TO_STEP_B: Record<CategoryKey, StepBKey> = {
+// Mappa 1:1 gruppo di attività → caratteristica (schema attività/caratteristiche del workshop)
+export const CATEGORY_TO_CHARACTERISTIC: Record<CategoryKey, CharacteristicKey> = {
   ripetitive: "variabilita",
   analisiDati: "dati",
   documentazione: "docStandard",
@@ -15,23 +28,19 @@ export const CATEGORY_TO_STEP_B: Record<CategoryKey, StepBKey> = {
 };
 
 export type UnlockedSteps = {
-  A: boolean;
-  variabilita: boolean;
-  dati: boolean;
-  docStandard: boolean;
-  criteri: boolean;
-  C: boolean;
+  step1: boolean;
+  step2: boolean;
+  step3: boolean;
+  step4: boolean;
   // Blocco 2 — Use Case Submission (un unico form, sbloccato in blocco).
   useCase: boolean;
 };
 
 export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
-  A: false,
-  variabilita: false,
-  dati: false,
-  docStandard: false,
-  criteri: false,
-  C: false,
+  step1: false,
+  step2: false,
+  step3: false,
+  step4: false,
   useCase: false,
 };
 
@@ -55,33 +64,54 @@ export type ChatMessage = {
   content: string;
 };
 
-export type StepASubmission = {
+/** Step 1 — quali attività svolgo (più di una) e in quale contesto organizzativo. */
+export type Step1Submission = {
   dipartimento?: string;
   areaFunzionale?: string;
   attivitaSelezionate?: string[]; // chiavi delle attività scelte (es. "ricopiature")
-  processo?: string;
-  attivitaStrumenti?: string;
-  descrizione?: string;
-  fteDurata?: string;
-  fteFrequenza?: string;
-  ftePersone?: string;
   chatLog?: ChatMessage[];
   updatedAt?: number; // ultimo salvataggio automatico della bozza
   completedAt?: number;
 };
 
-export type StepBAnswer = {
-  chatLog: ChatMessage[];
-  sintesi?: string; // riepilogo delle risposte generato dall'agente
-  lettura?: string; // euristica del documento associata alla dimensione
+export type FrequenzaPeriodo = "giorno" | "settimana" | "mese" | "anno";
+
+/**
+ * Step 2 — stima dell'impegno per una singola attività. I valori restano
+ * separati (non pre-moltiplicati) così la stima si può correggere e il calcolo
+ * ore/anno resta trasparente e ricalcolabile ovunque serva.
+ */
+export type AttivitaEffort = {
+  durataMinuti?: number; // durata media di una esecuzione
+  frequenzaNumero?: number; // quante volte per periodo
+  frequenzaPeriodo?: FrequenzaPeriodo;
+  persone?: number; // persone che svolgono l'attività
+};
+
+export type Step2Submission = {
+  effort?: Record<string, AttivitaEffort>; // per chiave attività
+  /** Le (massimo) 3 attività più onerose, confermate dal partecipante. */
+  topAttivita?: string[];
+  chatLog?: ChatMessage[];
+  updatedAt?: number;
   completedAt?: number;
 };
 
-export type StepBSubmission = Partial<Record<StepBKey, StepBAnswer>>;
+/**
+ * Step 3 — risposte alle domande sulle caratteristiche. Chiave della risposta:
+ * `${caratteristica}:${idDomanda}` (le domande vivono in `config/block1Flow.ts`).
+ */
+export type Step3Submission = {
+  risposte?: Record<string, string>;
+  chatLog?: ChatMessage[];
+  updatedAt?: number;
+  completedAt?: number;
+};
 
-export type ProfiloScores = Partial<Record<StepBKey, number>>; // punteggi 1-5 solo descrittivi, non prescrittivi
+export type ProfiloScores = Partial<Record<CharacteristicKey, number>>; // punteggi 1-5 solo descrittivi, non prescrittivi
 
-export type StepCSubmission = {
+/** Step 4 — output del Blocco 1. */
+export type Step4Submission = {
   sintesi?: string;
   profilo?: ProfiloScores;
   generatedAt?: number;
@@ -102,23 +132,24 @@ export type Block2Submission = {
   completedAt?: number;
 };
 
+export type ParticipantTab = "1" | "2" | "3" | "4" | "UC";
+
 /**
  * Punto in cui il partecipante stava lavorando: salvato lato server insieme
  * alla submission così che il rientro (anche da un altro dispositivo) riapra
- * esattamente lo step/sottosezione dove ci si era interrotti.
- * "UC" è il form del Blocco 2.
+ * esattamente lo step dove ci si era interrotti. "UC" è il form del Blocco 2.
  */
 export type ParticipantProgress = {
-  tab: "A" | "B" | "C" | "UC";
-  stepBDimension?: StepBKey;
+  tab: ParticipantTab;
   updatedAt: number;
 };
 
 export type Submission = {
   participantId: string;
-  stepA?: StepASubmission;
-  stepB?: StepBSubmission;
-  stepC?: StepCSubmission;
+  step1?: Step1Submission;
+  step2?: Step2Submission;
+  step3?: Step3Submission;
+  step4?: Step4Submission;
   block2?: Block2Submission;
   progress?: ParticipantProgress;
 };
@@ -131,3 +162,20 @@ export type SessionSummary = {
   participantCount: number;
   lastActivityAt: number;
 };
+
+/** Ore/anno assorbite da un'attività: durata × frequenza annua × persone. */
+export function oreAnnue(effort: AttivitaEffort | undefined): number | null {
+  if (!effort) return null;
+  const { durataMinuti, frequenzaNumero, frequenzaPeriodo, persone } = effort;
+  if (!durataMinuti || !frequenzaNumero || !frequenzaPeriodo) return null;
+
+  const perAnno: Record<FrequenzaPeriodo, number> = {
+    giorno: 220, // giorni lavorativi in un anno
+    settimana: 44, // settimane lavorative
+    mese: 11, // mesi lavorativi
+    anno: 1,
+  };
+
+  const esecuzioniAnno = frequenzaNumero * perAnno[frequenzaPeriodo];
+  return (durataMinuti / 60) * esecuzioniAnno * (persone && persone > 0 ? persone : 1);
+}

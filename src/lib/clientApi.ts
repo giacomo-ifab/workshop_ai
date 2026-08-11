@@ -1,4 +1,4 @@
-import { ParticipantProgress, Submission, StepBKey } from "./types";
+import { ParticipantProgress, Submission } from "./types";
 
 /**
  * Errore con lo status HTTP: serve a distinguere "sessione/partecipante non
@@ -97,22 +97,24 @@ export function unlockStep(code: string, step: string, value: boolean) {
   });
 }
 
-export function submitStepA(code: string, participantId: string, data: import("./types").StepASubmission) {
+export function submitStep1(code: string, participantId: string, data: import("./types").Step1Submission) {
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
     method: "POST",
-    body: JSON.stringify({ participantId, part: "stepA", data }),
+    body: JSON.stringify({ participantId, part: "step1", data }),
   });
 }
 
-export function submitStepB(
-  code: string,
-  participantId: string,
-  dimension: StepBKey,
-  data: { chatLog: import("./types").ChatMessage[]; completedAt?: number }
-) {
+export function submitStep2(code: string, participantId: string, data: import("./types").Step2Submission) {
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
     method: "POST",
-    body: JSON.stringify({ participantId, part: "stepB", dimension, data }),
+    body: JSON.stringify({ participantId, part: "step2", data }),
+  });
+}
+
+export function submitStep3(code: string, participantId: string, data: import("./types").Step3Submission) {
+  return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ participantId, part: "step3", data }),
   });
 }
 
@@ -134,7 +136,7 @@ export function saveProgress(code: string, participantId: string, progress: Part
   });
 }
 
-export function synthesizeStepC(code: string, participantId: string) {
+export function synthesizeStep4(code: string, participantId: string) {
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/synthesize`, {
     method: "POST",
     body: JSON.stringify({ participantId }),

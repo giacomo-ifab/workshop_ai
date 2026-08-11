@@ -13,21 +13,19 @@ import {
   deleteSession,
 } from "@/lib/clientApi";
 import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
-import { CATEGORIES, STEP_B_CONFIG } from "@/config/block1Flow";
+import { CATEGORIES, labelForActivity } from "@/config/block1Flow";
 import { BLOCK2_FIELDS } from "@/config/block2Form";
-import { Participant, Submission, StepBKey, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
+import { Participant, Submission, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 
 const POLL_MS = 4000;
 
 const BLOCK2_FIELD_COUNT = BLOCK2_FIELDS.length;
 
 const STEP_ORDER: { key: keyof UnlockedSteps; label: string; block: 1 | 2 }[] = [
-  { key: "A", label: "A · Identifica il processo", block: 1 },
-  { key: "variabilita", label: "B1 · Variabilità", block: 1 },
-  { key: "dati", label: "B2 · Disponibilità e qualità dei dati", block: 1 },
-  { key: "docStandard", label: "B3 · Documenti standard", block: 1 },
-  { key: "criteri", label: "B4 · Criteri e regole definite", block: 1 },
-  { key: "C", label: "C · Output", block: 1 },
+  { key: "step1", label: "1 · Attività svolte", block: 1 },
+  { key: "step2", label: "2 · Tempo assorbito", block: 1 },
+  { key: "step3", label: "3 · Caratteristiche", block: 1 },
+  { key: "step4", label: "4 · Output", block: 1 },
   { key: "useCase", label: "Use Case Submission", block: 2 },
 ];
 
@@ -137,7 +135,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
 
   const activityCounts = CATEGORIES.flatMap((c) => c.activities).map((act) => ({
     attivita: act.label,
-    conteggio: rows.filter((r) => r.submission.stepA?.attivitaSelezionate?.includes(act.key)).length,
+    conteggio: rows.filter((r) => r.submission.step1?.attivitaSelezionate?.includes(act.key)).length,
   }));
 
   return (
@@ -275,17 +273,20 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                 <thead>
                   <tr className="border-b border-ifab-border text-ifab-text-muted">
                     <th className="py-2 pr-4">Nome</th>
-                    <th className="py-2 pr-4">Processo</th>
-                    <th className="py-2 pr-4">Step A</th>
-                    <th className="py-2 pr-4">Step B</th>
+                    <th className="py-2 pr-4">Attività più onerose</th>
+                    <th className="py-2 pr-4">Step 1</th>
+                    <th className="py-2 pr-4">Step 2</th>
+                    <th className="py-2 pr-4">Step 3</th>
                     <th className="py-2 pr-4">Output</th>
                     <th className="py-2 pr-4">Use Case</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map(({ participant, submission }) => {
-                    const bDone = (Object.keys(STEP_B_CONFIG) as StepBKey[]).filter(
-                      (k) => submission.stepB?.[k]?.completedAt
+                    const attivitaCount = submission.step1?.attivitaSelezionate?.length ?? 0;
+                    const top = submission.step2?.topAttivita ?? [];
+                    const risposte = Object.values(submission.step3?.risposte ?? {}).filter((v) =>
+                      Boolean(v && v.trim())
                     ).length;
                     // Blocco 2: distingue "consegnata" (Salva scheda) da "in bozza".
                     const useCaseFilled = Object.values(submission.block2?.values ?? {}).filter((v) =>
@@ -299,17 +300,24 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                     return (
                       <tr key={participant.participantId} className="border-b border-ifab-border">
                         <td className="py-2 pr-4 font-medium text-ifab-text">{participant.name}</td>
-                        <td className="py-2 pr-4 text-ifab-text-muted">{submission.stepA?.processo || "—"}</td>
-                        <td className="py-2 pr-4">{submission.stepA?.completedAt ? "✅" : "—"}</td>
-                        <td className="py-2 pr-4">{bDone}/4</td>
-                        <td className="py-2 pr-4">{submission.stepC?.sintesi ? "✅" : "—"}</td>
+                        <td className="py-2 pr-4 text-ifab-text-muted">
+                          {top.length > 0 ? top.map(labelForActivity).join(", ") : "—"}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {submission.step1?.completedAt ? "✅" : attivitaCount > 0 ? `${attivitaCount} sel.` : "—"}
+                        </td>
+                        <td className="py-2 pr-4">{submission.step2?.completedAt ? "✅" : top.length > 0 ? "in corso" : "—"}</td>
+                        <td className="py-2 pr-4">
+                          {submission.step3?.completedAt ? "✅" : risposte > 0 ? `${risposte} risp.` : "—"}
+                        </td>
+                        <td className="py-2 pr-4">{submission.step4?.sintesi ? "✅" : "—"}</td>
                         <td className="py-2 pr-4">{useCaseLabel}</td>
                       </tr>
                     );
                   })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-4 text-center text-ifab-text-muted">
+                      <td colSpan={7} className="py-4 text-center text-ifab-text-muted">
                         Nessun partecipante ancora connesso.
                       </td>
                     </tr>

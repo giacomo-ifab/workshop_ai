@@ -12,9 +12,13 @@ export type AgentChatHandle = {
 type AgentChatProps = {
   subsection: string;
   context?: {
+    /** Step 1 e 2: attività selezionate dal partecipante. */
     selectedActivityLabels?: string[];
+    /** Step 3: caratteristiche da indagare e attività a cui si riferiscono. */
+    characteristicLabels?: string[];
+    attivitaLabels?: string[];
+    /** Blocco 2: contesto del caso d'uso e sezione su cui si chiede aiuto. */
     processoContext?: string;
-    /** Blocco 2: sezione del form su cui il partecipante sta chiedendo aiuto. */
     sectionLabel?: string;
   };
   initialMessage: string;

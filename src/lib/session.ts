@@ -7,10 +7,10 @@ import {
   ParticipantProgress,
   SessionMeta,
   SessionSummary,
-  StepASubmission,
-  StepBKey,
-  StepBSubmission,
-  StepCSubmission,
+  Step1Submission,
+  Step2Submission,
+  Step3Submission,
+  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "./types";
@@ -239,27 +239,52 @@ export async function getAllSubmissions(code: string): Promise<Submission[]> {
   return results.map((sub, i) => sub ?? { participantId: participants[i].participantId });
 }
 
-export async function saveStepA(
+/** Step 1 — contesto e attività selezionate. */
+export async function saveStep1(
   code: string,
   participantId: string,
-  data: StepASubmission
+  data: Step1Submission
 ): Promise<Submission> {
   const redis = getRedis();
   const current = await getSubmission(code, participantId);
-  current.stepA = { ...current.stepA, ...data };
+  current.step1 = { ...current.step1, ...data };
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }
 
-export async function saveStepBAnswer(
+/**
+ * Step 2 — stime di impegno. Le stime si fondono per chiave attività, così un
+ * salvataggio parziale non azzera quelle già inserite.
+ */
+export async function saveStep2(
   code: string,
   participantId: string,
-  dimension: StepBKey,
-  data: NonNullable<StepBSubmission[StepBKey]>
+  data: Step2Submission
 ): Promise<Submission> {
   const redis = getRedis();
   const current = await getSubmission(code, participantId);
-  current.stepB = { ...current.stepB, [dimension]: { ...current.stepB?.[dimension], ...data } };
+  current.step2 = {
+    ...current.step2,
+    ...data,
+    effort: { ...current.step2?.effort, ...data.effort },
+  };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+/** Step 3 — risposte alle domande sulle caratteristiche (fuse per chiave domanda). */
+export async function saveStep3(
+  code: string,
+  participantId: string,
+  data: Step3Submission
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.step3 = {
+    ...current.step3,
+    ...data,
+    risposte: { ...current.step3?.risposte, ...data.risposte },
+  };
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }
@@ -297,14 +322,15 @@ export async function saveProgress(
   return current;
 }
 
-export async function saveStepC(
+/** Step 4 — output del Blocco 1 (sintesi e profilo generati dall'AI). */
+export async function saveStep4(
   code: string,
   participantId: string,
-  data: StepCSubmission
+  data: Step4Submission
 ): Promise<Submission> {
   const redis = getRedis();
   const current = await getSubmission(code, participantId);
-  current.stepC = { ...current.stepC, ...data };
+  current.step4 = { ...current.step4, ...data };
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }

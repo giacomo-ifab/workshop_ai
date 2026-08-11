@@ -1,16 +1,17 @@
 # Workshop AI Adoption — IFAB Foundation
 
-App interattiva per condurre dal vivo il workshop di AI Adoption. Questa prima iterazione copre il **Blocco 1 — Identificazione Opportunità**: il facilitatore sblocca gli step uno alla volta, i partecipanti (identificati dal solo nome) compilano ogni sottosezione guidati da un agente AI.
+App interattiva per condurre dal vivo il workshop di AI Adoption. Il facilitatore sblocca gli step uno alla volta, i partecipanti (identificati dal solo nome) compilano ogni step con un assistente AI a fianco.
 
-Vedi il piano architetturale completo in `C:\Users\GaiaGambarelli\.claude\plans\foamy-forging-eich.md` per il contesto e le decisioni prese.
+## Come funziona il Blocco 1 — Identificazione Opportunità
 
-## Come funziona il Blocco 1
+- **Step 1 — Attività svolte**: contesto minimo (dipartimento, area funzionale) e selezione multipla delle attività dall'elenco raggruppato per tipologia. L'assistente spiega che cosa si intende per ciascuna voce e in quale voce rientra un'attività raccontata a parole.
+- **Step 2 — Tempo assorbito**: per ogni attività selezionata si indicano durata media, frequenza (giorno/settimana/mese/anno) e persone coinvolte; l'app calcola le **ore/anno** (durata × frequenza annua × persone) e propone le **3 attività più onerose**, che il partecipante può confermare o cambiare. È un form, non una chat: il dato serve calcolabile e confrontabile fra partecipanti. L'assistente aiuta a stimare i valori mancanti.
+- **Step 3 — Caratteristiche**: a ogni attività corrisponde **una** caratteristica da indagare, decisa dal gruppo a cui appartiene (Variabilità · Disponibilità e qualità dei dati · Documenti standard · Criteri e regole definite). Per ciascuna, **una o due domande** a risposta libera; se due delle tre attività ricadono sulla stessa caratteristica la si chiede una volta sola, indicando quali attività copre. L'assistente spiega le domande e aiuta a rendere concrete le risposte.
+- **Step 4 — Output**: sintesi descrittiva generata dall'AI, classifica delle attività per ore/anno, radar delle caratteristiche indagate ed export PDF. (Nessuna raccomandazione di approccio AI qui: arriverà a fine workshop.)
 
-- **Step A — Identifica il processo**: selezione delle attività svolte (raggruppate in 4 categorie) + form del processo (Processo, Attività/strumenti, Descrizione, FTE), con agente AI di supporto.
-- **Step B — Caratterizza il processo**: 4 sottosezioni (Variabilità, Dati, Documenti standard, Criteri e regole), attivate in base alle categorie selezionate in Step A, ciascuna con un agente AI che pone le domande guida.
-- **Step C — Output**: sintesi descrittiva generata dall'AI + visualizzazione radar del profilo del processo + export PDF. (Nessuna raccomandazione di approccio AI qui: arriverà a fine workshop.)
+L'abbinamento attività → caratteristica e le domande vivono in `src/config/block1Flow.ts`: modificarli lì aggiorna form, prompt degli agenti e sintesi finale.
 
-Il facilitatore sblocca ogni step/sottosezione dalla propria dashboard; i partecipanti vedono lo sblocco entro pochi secondi (polling).
+Il facilitatore sblocca ogni step dalla propria dashboard; i partecipanti vedono lo sblocco entro pochi secondi (polling).
 
 ## Blocco 2 — Use Case Submission
 
@@ -28,8 +29,8 @@ Tutto lo stato vive lato server (Redis, TTL 48h): chiudere il browser, ricaricar
 **Partecipante**
 - L'identità (codice sessione + participantId + nome) resta nel `localStorage`: riaprendo l'app compare in home la card **"Riprendi"**, e su `/join` il pulsante **"Rientra nella sessione"** — senza ridigitare nulla.
 - Da un altro dispositivo (o dopo aver svuotato il browser) basta rientrare su `/join` con lo **stesso codice e lo stesso nome**: il match sul nome normalizzato ricollega alla stessa submission.
-- I campi dello **Step A si autosalvano** dopo ~1 secondo di inattività (e all'uscita dallo step), quindi anche la bozza non ancora confermata con "Salva" viene ripristinata.
-- Viene ripristinato anche il **punto in cui ci si era interrotti** (tab A/B/C e sottosezione di Step B), salvato lato server a ogni cambio step.
+- Tutti gli step **si autosalvano** dopo ~1 secondo di inattività (e all'uscita dallo step), quindi anche la bozza non ancora confermata viene ripristinata.
+- Viene ripristinato anche il **punto in cui ci si era interrotti** (step 1-4 o scheda Use Case), salvato lato server a ogni cambio step.
 - Se la sessione è scaduta o il partecipante non risulta più registrato, si viene riportati a `/join` con un avviso, invece di restare su una pagina in caricamento.
 
 **Facilitatore**
@@ -72,13 +73,14 @@ src/
 │   ├── join/page.tsx                 # ingresso partecipante
 │   ├── facilitator/login/page.tsx    # login facilitatore
 │   ├── facilitator/[code]/page.tsx   # dashboard facilitatore
-│   ├── session/[code]/page.tsx       # vista partecipante (Step A/B/C)
+│   ├── session/[code]/page.tsx       # vista partecipante (step 1-4 + Use Case)
 │   └── api/                          # route handler (auth, sessione, agente AI, sintesi)
 │       ├── session/list              # sessioni attive: rientro del facilitatore
 │       └── session/[code]/resume     # rientro del partecipante con identità salvata
-├── components/                       # StepA, StepB, StepC, Block2Form, AgentChat,
+├── components/                       # Step1Activities, Step2Effort, Step3Characteristics,
+│                                     # Step4Output, Block2Form, AgentChat,
 │                                     # AssistantPanel (pannello fisso a destra), ResumeCard
-├── config/block1Flow.ts              # contenuto del Blocco 1 (attività, domande guida, prompt)
+├── config/block1Flow.ts              # Blocco 1: attività, abbinamento caratteristiche, domande, prompt
 ├── config/block2Form.ts              # scheda Use Case del Blocco 2 (sezioni, campi, prompt agente)
 └── lib/                              # tipi, client Redis, helper sessione, auth, client API,
                                       # participantStorage (identità salvata nel browser)
@@ -86,4 +88,6 @@ src/
 
 ## Estendere ai blocchi successivi
 
-L'architettura (sessione + step unlock + agente AI per sottosezione + output) è pensata per essere riusata per i blocchi 2-4 (Prioritizzazione, Design, Qualità), aggiungendo nuove chiavi a `UnlockedSteps`, nuovi file di config analoghi a `block1Flow.ts` e nuovi componenti Step, senza toccare il modello di sessione/autenticazione.
+L'architettura (sessione + step unlock + assistente AI per step + output) è pensata per essere riusata per i blocchi successivi (Prioritizzazione, Design, Qualità), aggiungendo nuove chiavi a `UnlockedSteps`, nuovi file di config analoghi a `block1Flow.ts`/`block2Form.ts` e nuovi componenti Step, senza toccare il modello di sessione/autenticazione.
+
+Nota: la whitelist degli step in `/api/session/[code]/unlock` deriva da `DEFAULT_UNLOCKED_STEPS`, quindi una nuova chiave è sbloccabile senza altre modifiche. Le sessioni già in corso al momento di un cambio di struttura ripartono con tutti gli step bloccati (le chiavi non riconosciute risultano `false`): basta risbloccarli dalla dashboard.

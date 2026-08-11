@@ -1,27 +1,25 @@
 import { NextResponse } from "next/server";
 import { getOpenAI, CHAT_MODEL } from "@/lib/openaiClient";
-import { getSubmission, saveStepC, saveStepBAnswer } from "@/lib/session";
-import { CATEGORIES, STEP_B_CONFIG } from "@/config/block1Flow";
-import { STEP_B_KEYS, StepBKey } from "@/lib/types";
+import { getSubmission, saveStep4 } from "@/lib/session";
+import {
+  CHARACTERISTICS,
+  answerKey,
+  categoryForActivity,
+  labelForActivity,
+} from "@/config/block1Flow";
+import { CATEGORY_TO_CHARACTERISTIC, CharacteristicKey, oreAnnue } from "@/lib/types";
 
-const ALL_ACTIVITIES = CATEGORIES.flatMap((c) => c.activities);
+const SYNTHESIS_SYSTEM_PROMPT = `Sei un analista che rielabora quanto raccolto in un workshop di AI Adoption.
 
-function labelForActivity(key: string): string {
-  return ALL_ACTIVITIES.find((a) => a.key === key)?.label ?? key;
-}
-
-const SYNTHESIS_SYSTEM_PROMPT = `Sei un analista che rielabora quanto raccolto in un workshop di AI Adoption su un processo di lavoro candidato.
-
-Riceverai: la descrizione del processo (Step A) e, per ciascuna dimensione valutata (Step B), la trascrizione della conversazione con il partecipante.
+Riceverai: il contesto organizzativo del partecipante, le attività che svolge con la stima del tempo che assorbono (ore/anno), e le risposte alle domande sulle caratteristiche delle attività più onerose.
 
 Genera un JSON con questa struttura esatta:
 {
-  "sintesiGenerale": "sintesi testuale (150-250 parole) del processo candidato, nello stile di una scheda di workshop: cosa fa oggi il processo, con quali strumenti, e cosa emerge dalle dimensioni analizzate. Puramente descrittiva.",
-  "stepBSummaries": { "<dimensione>": "riassunto in 2-3 frasi di quanto emerso per quella dimensione, basato SOLO sulla conversazione" },
-  "profilo": { "<dimensione>": punteggio da 1 a 5 }
+  "sintesiGenerale": "sintesi testuale (150-250 parole) nello stile di una scheda di workshop: quali attività assorbono più tempo e perché, e cosa emerge dalle caratteristiche indagate. Puramente descrittiva.",
+  "profilo": { "<caratteristica>": punteggio da 1 a 5 }
 }
 
-Criteri punteggio 1-5 per dimensione (puramente descrittivo, NON è una raccomandazione di soluzione):
+Criteri punteggio 1-5 per caratteristica (puramente descrittivo, NON è una raccomandazione di soluzione):
 - variabilita: 1 = molto variabile/imprevedibile, 5 = molto standardizzata/ripetitiva
 - dati: 1 = dati frammentati/scarsi, 5 = dati strutturati/storicizzati/di buona qualità
 - docStandard: 1 = nessun template, contenuto sempre originale, 5 = template solidi e contenuto ampiamente riutilizzabile
@@ -30,8 +28,8 @@ Criteri punteggio 1-5 per dimensione (puramente descrittivo, NON è una raccoman
 REGOLE:
 - Rispondi SOLO con JSON valido.
 - NON includere raccomandazioni su quale tecnologia/approccio AI adottare: qui serve solo descrivere quanto raccolto. Quella valutazione arriverà in una fase successiva del workshop.
-- Se una dimensione non è stata trattata, omettila da "stepBSummaries" e "profilo".
-- Basati esclusivamente su quanto detto nelle conversazioni fornite.`;
+- Metti in "profilo" solo le caratteristiche per cui hai ricevuto risposte.
+- Basati esclusivamente sui dati forniti: se una stima manca, dillo invece di inventarla.`;
 
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -43,32 +41,56 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     }
 
     const submission = await getSubmission(code, participantId);
-    const stepA = submission.stepA;
-    if (!stepA) {
-      return NextResponse.json({ error: "Step A non ancora compilato" }, { status: 400 });
+    const step1 = submission.step1;
+    if (!step1?.attivitaSelezionate?.length) {
+      return NextResponse.json({ error: "Step 1 non ancora compilato" }, { status: 400 });
     }
 
-    const attivitaLabels = (stepA.attivitaSelezionate ?? []).map(labelForActivity);
+    const effort = submission.step2?.effort ?? {};
+    const top = submission.step2?.topAttivita ?? [];
 
-    const stepAText = [
-      `Processo: ${stepA.processo ?? "n/d"}`,
-      `Attività selezionate: ${attivitaLabels.join(", ") || "nessuna"}`,
-      `Attività e strumenti: ${stepA.attivitaStrumenti ?? "n/d"}`,
-      `Descrizione e caratteristiche: ${stepA.descrizione ?? "n/d"}`,
-      `FTE: durata ${stepA.fteDurata ?? "n/d"} × frequenza ${stepA.fteFrequenza ?? "n/d"} × persone ${stepA.ftePersone ?? "n/d"}`,
+    const contestoText = [
+      `Dipartimento: ${step1.dipartimento || "n/d"}`,
+      `Area funzionale: ${step1.areaFunzionale || "n/d"}`,
     ].join("\n");
 
-    const answeredDimensions = STEP_B_KEYS.filter((k) => submission.stepB?.[k]?.chatLog?.length);
+    const attivitaText = step1.attivitaSelezionate
+      .map((key) => {
+        const ore = oreAnnue(effort[key]);
+        const e = effort[key];
+        const dettaglio = e
+          ? `durata ${e.durataMinuti ?? "n/d"} min × ${e.frequenzaNumero ?? "n/d"} volte/${e.frequenzaPeriodo ?? "n/d"} × ${e.persone ?? "n/d"} persone`
+          : "stima non fornita";
+        const oreText = ore !== null ? `${Math.round(ore)} ore/anno` : "ore/anno non calcolabili";
+        const flag = top.includes(key) ? " [FRA LE PIÙ ONEROSE]" : "";
+        return `- ${labelForActivity(key)}: ${dettaglio} → ${oreText}${flag}`;
+      })
+      .join("\n");
 
-    const stepBText = answeredDimensions
-      .map((dim) => {
-        const chatLog = submission.stepB?.[dim]?.chatLog ?? [];
-        const transcript = chatLog.map((m) => `${m.role === "user" ? "PARTECIPANTE" : "FACILITATORE AI"}: ${m.content}`).join("\n");
-        return `--- Dimensione: ${dim} (${STEP_B_CONFIG[dim].label}) ---\n${transcript}`;
+    // Caratteristiche effettivamente indagate: derivate dalle attività più onerose.
+    const caratteristiche = Array.from(
+      new Set(
+        top
+          .map((key) => categoryForActivity(key))
+          .filter((c): c is NonNullable<typeof c> => Boolean(c))
+          .map((c) => CATEGORY_TO_CHARACTERISTIC[c])
+      )
+    );
+
+    const risposte = submission.step3?.risposte ?? {};
+    const caratteristicheText = caratteristiche
+      .map((k: CharacteristicKey) => {
+        const cfg = CHARACTERISTICS[k];
+        const qa = cfg.questions
+          .map((q) => `  D: ${q.text}\n  R: ${risposte[answerKey(k, q.id)] || "(nessuna risposta)"}`)
+          .join("\n");
+        return `--- Caratteristica: ${k} (${cfg.label}) ---\n${qa}\n  Chiave di lettura: ${cfg.lettura}`;
       })
       .join("\n\n");
 
-    const userContent = `STEP A - DESCRIZIONE PROCESSO:\n${stepAText}\n\nSTEP B - CONVERSAZIONI PER DIMENSIONE:\n${stepBText || "(nessuna dimensione approfondita)"}`;
+    const userContent = `CONTESTO:\n${contestoText}\n\nATTIVITÀ E TEMPO ASSORBITO:\n${attivitaText}\n\nCARATTERISTICHE INDAGATE:\n${
+      caratteristicheText || "(nessuna caratteristica ancora indagata)"
+    }`;
 
     const openai = getOpenAI();
     const response = await openai.chat.completions.create({
@@ -84,22 +106,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     const content = response.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(content) as {
       sintesiGenerale?: string;
-      stepBSummaries?: Partial<Record<StepBKey, string>>;
-      profilo?: Partial<Record<StepBKey, number>>;
+      profilo?: Partial<Record<CharacteristicKey, number>>;
     };
 
-    // Backfill sintesi + lettura statica per ciascuna dimensione trattata
-    await Promise.all(
-      answeredDimensions.map((dim) =>
-        saveStepBAnswer(code, participantId, dim, {
-          chatLog: submission.stepB?.[dim]?.chatLog ?? [],
-          sintesi: parsed.stepBSummaries?.[dim],
-          lettura: STEP_B_CONFIG[dim].lettura,
-        })
-      )
-    );
-
-    const updated = await saveStepC(code, participantId, {
+    const updated = await saveStep4(code, participantId, {
       sintesi: parsed.sintesiGenerale,
       profilo: parsed.profilo,
       generatedAt: Date.now(),
@@ -107,7 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
 
     return NextResponse.json({ submission: updated });
   } catch (error) {
-    console.error("Errore sintesi Step C:", error);
+    console.error("Errore sintesi Step 4:", error);
     const message = error instanceof Error ? error.message : "Errore interno";
     return NextResponse.json({ error: message }, { status: 500 });
   }

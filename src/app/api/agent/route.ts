@@ -1,10 +1,41 @@
 import { NextResponse } from "next/server";
 import { getOpenAI, CHAT_MODEL } from "@/lib/openaiClient";
-import { COMPLETION_TOKEN, buildStepASystemPrompt, buildStepBSystemPrompt } from "@/config/block1Flow";
+import {
+  COMPLETION_TOKEN,
+  buildStep1SystemPrompt,
+  buildStep2SystemPrompt,
+  buildStep3SystemPrompt,
+} from "@/config/block1Flow";
 import { buildBlock2SystemPrompt } from "@/config/block2Form";
-import { StepBKey } from "@/lib/types";
 
-const STEP_B_KEYS = ["variabilita", "dati", "docStandard", "criteri"];
+/**
+ * Tutti gli agenti sono assistenti di supporto alla compilazione: spiegano,
+ * chiariscono e aiutano a concretizzare, ma non conducono un'intervista da
+ * completare (il token di fine step resta gestito qui per compatibilità).
+ */
+function systemPromptFor(
+  subsection: string,
+  context: {
+    selectedActivityLabels?: string[];
+    characteristicLabels?: string[];
+    attivitaLabels?: string[];
+    processoContext?: string;
+    sectionLabel?: string;
+  }
+): string | null {
+  switch (subsection) {
+    case "step1":
+      return buildStep1SystemPrompt(context.selectedActivityLabels ?? []);
+    case "step2":
+      return buildStep2SystemPrompt(context.selectedActivityLabels ?? []);
+    case "step3":
+      return buildStep3SystemPrompt(context.characteristicLabels ?? [], context.attivitaLabels ?? []);
+    case "block2":
+      return buildBlock2SystemPrompt(context.processoContext ?? "", context.sectionLabel);
+    default:
+      return null;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -14,16 +45,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Richiesta non valida" }, { status: 400 });
     }
 
-    let systemPrompt: string;
-    if (subsection === "stepA") {
-      systemPrompt = buildStepASystemPrompt(context?.selectedActivityLabels ?? []);
-    } else if (STEP_B_KEYS.includes(subsection)) {
-      systemPrompt = buildStepBSystemPrompt(subsection as StepBKey, context?.processoContext ?? "");
-    } else if (subsection === "block2") {
-      // Agente di supporto alla compilazione: nessuna intervista da completare,
-      // quindi non emette il token di fine step.
-      systemPrompt = buildBlock2SystemPrompt(context?.processoContext ?? "", context?.sectionLabel);
-    } else {
+    const systemPrompt = systemPromptFor(subsection, context ?? {});
+    if (!systemPrompt) {
       return NextResponse.json({ error: "subsection non valida" }, { status: 400 });
     }
 

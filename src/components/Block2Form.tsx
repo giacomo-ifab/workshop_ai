@@ -8,7 +8,8 @@ import {
   Block2Section,
   INITIAL_MESSAGE_BLOCK2,
 } from "@/config/block2Form";
-import { Block2FieldValue, Block2Submission, ChatMessage, StepASubmission } from "@/lib/types";
+import { labelForActivity } from "@/config/block1Flow";
+import { Block2FieldValue, Block2Submission, ChatMessage, Step1Submission, Step2Submission } from "@/lib/types";
 import { submitBlock2 } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
 import AgentChat, { AgentChatHandle } from "./AgentChat";
@@ -32,13 +33,15 @@ function asList(value: Block2FieldValue | undefined): string[] {
 export default function Block2Form({
   code,
   participantId,
-  stepA,
+  step1,
+  step2,
   block2,
   onSaved,
 }: {
   code: string;
   participantId: string;
-  stepA?: StepASubmission;
+  step1?: Step1Submission;
+  step2?: Step2Submission;
   block2?: Block2Submission;
   onSaved: (data: Block2Submission) => void;
 }) {
@@ -58,7 +61,14 @@ export default function Block2Form({
   const onSavedRef = useRef(onSaved);
   const chatRef = useRef<AgentChatHandle>(null);
 
-  const processoContext = [stepA?.processo, stepA?.descrizione].filter(Boolean).join(" — ");
+  // Contesto per l'agente: le attività più onerose emerse dal Blocco 1.
+  const processoContext = [
+    (step2?.topAttivita ?? []).map(labelForActivity).join(", "),
+    step1?.dipartimento,
+    step1?.areaFunzionale,
+  ]
+    .filter(Boolean)
+    .join(" — ");
   const compiled = BLOCK2_SECTIONS.flatMap((s) => s.fields).filter((f) => isFilled(values[f.id])).length;
 
   useEffect(() => {

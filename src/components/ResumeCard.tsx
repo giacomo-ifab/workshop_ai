@@ -5,12 +5,13 @@ import Link from "next/link";
 import { RotateCcw, X } from "lucide-react";
 import { ApiError, resumeSession } from "@/lib/clientApi";
 import { clearStoredIdentity, readStoredIdentity } from "@/lib/participantStorage";
-import { Submission } from "@/lib/types";
+import { ParticipantTab, Submission } from "@/lib/types";
 
-const TAB_LABELS: Record<"A" | "B" | "C" | "UC", string> = {
-  A: "Step A · Identifica il processo",
-  B: "Step B · Caratterizza il processo",
-  C: "Step C · Output",
+const TAB_LABELS: Record<ParticipantTab, string> = {
+  "1": "Step 1 · Attività svolte",
+  "2": "Step 2 · Tempo assorbito",
+  "3": "Step 3 · Caratteristiche",
+  "4": "Step 4 · Output",
   UC: "Blocco 2 · Use Case Submission",
 };
 
@@ -18,9 +19,10 @@ function describeProgress(submission: Submission): string {
   const tab = submission.progress?.tab;
   if (tab) return TAB_LABELS[tab];
   if (submission.block2?.updatedAt) return TAB_LABELS.UC;
-  if (submission.stepC?.sintesi) return TAB_LABELS.C;
-  if (submission.stepB && Object.keys(submission.stepB).length > 0) return TAB_LABELS.B;
-  return TAB_LABELS.A;
+  if (submission.step4?.sintesi) return TAB_LABELS["4"];
+  if (submission.step3?.updatedAt) return TAB_LABELS["3"];
+  if (submission.step2?.updatedAt) return TAB_LABELS["2"];
+  return TAB_LABELS["1"];
 }
 
 /**

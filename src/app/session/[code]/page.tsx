@@ -12,38 +12,38 @@ import {
 } from "@/lib/participantStorage";
 import {
   Block2Submission,
-  StepASubmission,
-  StepBKey,
-  StepBSubmission,
-  StepCSubmission,
+  ParticipantTab,
+  Step1Submission,
+  Step2Submission,
+  Step3Submission,
+  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "@/lib/types";
 import { DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 import { nowMs } from "@/lib/time";
-import StepA from "@/components/StepA";
-import StepB from "@/components/StepB";
-import StepC from "@/components/StepC";
+import Step1Activities from "@/components/Step1Activities";
+import Step2Effort from "@/components/Step2Effort";
+import Step3Characteristics from "@/components/Step3Characteristics";
+import Step4Output from "@/components/Step4Output";
 import Block2Form from "@/components/Block2Form";
-
-type Tab = "A" | "B" | "C" | "UC";
 
 const POLL_MS = 4000;
 
-function isTabUnlocked(tab: Tab, steps: UnlockedSteps): boolean {
-  if (tab === "A") return steps.A;
-  if (tab === "B") return steps.variabilita || steps.dati || steps.docStandard || steps.criteri;
-  if (tab === "UC") return steps.useCase;
-  return steps.C;
-}
+const TAB_TO_STEP: Record<ParticipantTab, keyof UnlockedSteps> = {
+  "1": "step1",
+  "2": "step2",
+  "3": "step3",
+  "4": "step4",
+  UC: "useCase",
+};
 
 function hasWork(submission: Submission): boolean {
   return Boolean(
-    submission.stepA?.processo ||
-      submission.stepA?.completedAt ||
-      submission.stepA?.updatedAt ||
-      (submission.stepB && Object.keys(submission.stepB).length > 0) ||
-      submission.stepC?.sintesi ||
+    submission.step1?.updatedAt ||
+      submission.step2?.updatedAt ||
+      submission.step3?.updatedAt ||
+      submission.step4?.sintesi ||
       submission.block2?.updatedAt
   );
 }
@@ -54,8 +54,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
   const [identity, setIdentity] = useState<StoredIdentity | null>(null);
   const [unlockedSteps, setUnlockedSteps] = useState<UnlockedSteps>(DEFAULT_UNLOCKED_STEPS);
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [tab, setTab] = useState<Tab>("A");
-  const [stepBDimension, setStepBDimension] = useState<StepBKey | undefined>(undefined);
+  const [tab, setTab] = useState<ParticipantTab>("1");
   const [resumedBanner, setResumedBanner] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -89,8 +88,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           setIdentity(refreshed);
           setUnlockedSteps(meta.unlockedSteps);
           setSubmission(restored);
-          setStepBDimension(restored.progress?.stepBDimension);
-          if (savedTab && isTabUnlocked(savedTab, meta.unlockedSteps)) setTab(savedTab);
+          if (savedTab && meta.unlockedSteps[TAB_TO_STEP[savedTab]]) setTab(savedTab);
           setResumedBanner(hasWork(restored));
         });
       })
@@ -161,10 +159,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     return <div className="flex min-h-screen items-center justify-center bg-ifab-bg text-sm text-ifab-text-muted">Caricamento...</div>;
   }
 
-  const stepA = submission.stepA;
-  const stepB = submission.stepB;
-  const stepC = submission.stepC;
-  const block2 = submission.block2;
+  const { step1, step2, step3, step4, block2 } = submission;
 
   function updateSubmission(patch: Partial<Submission>) {
     setSubmission((prev) => ({ ...(prev as Submission), ...patch }));
@@ -172,29 +167,16 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
 
   /**
    * Ogni cambio di step viene memorizzato lato server: al rientro (anche da un
-   * altro dispositivo) si riparte da qui invece che sempre dallo Step A.
+   * altro dispositivo) si riparte da qui invece che sempre dal primo step.
    */
-  function rememberPosition(nextTab: Tab, dimension?: StepBKey) {
-    const current = identity;
-    if (!current) return;
-    void saveProgress(code, current.participantId, {
-      tab: nextTab,
-      stepBDimension: dimension,
-      updatedAt: nowMs(),
-    }).catch(() => {
-      // La posizione è un comfort, non un dato del workshop: se fallisce si prosegue.
-    });
-  }
-
-  function handleTabChange(nextTab: Tab) {
+  function handleTabChange(nextTab: ParticipantTab) {
     setTab(nextTab);
     setResumedBanner(false);
-    rememberPosition(nextTab, stepBDimension);
-  }
-
-  function handleStepBDimension(dimension: StepBKey) {
-    setStepBDimension(dimension);
-    rememberPosition("B", dimension);
+    const current = identity;
+    if (!current) return;
+    void saveProgress(code, current.participantId, { tab: nextTab, updatedAt: nowMs() }).catch(() => {
+      // La posizione è un comfort, non un dato del workshop: se fallisce si prosegue.
+    });
   }
 
   function handleExit() {
@@ -202,20 +184,17 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     router.replace("/join");
   }
 
-  const tabs: { key: Tab; label: string; unlocked: boolean }[] = [
-    { key: "A", label: "A · Identifica", unlocked: unlockedSteps.A },
-    {
-      key: "B",
-      label: "B · Caratterizza",
-      unlocked: unlockedSteps.variabilita || unlockedSteps.dati || unlockedSteps.docStandard || unlockedSteps.criteri,
-    },
-    { key: "C", label: "C · Output", unlocked: unlockedSteps.C },
-    { key: "UC", label: "2 · Use Case", unlocked: unlockedSteps.useCase },
+  const tabs: { key: ParticipantTab; label: string }[] = [
+    { key: "1", label: "1 · Attività" },
+    { key: "2", label: "2 · Tempo assorbito" },
+    { key: "3", label: "3 · Caratteristiche" },
+    { key: "4", label: "4 · Output" },
+    { key: "UC", label: "Use Case" },
   ];
 
   return (
-    // Quando il pannello dell'assistente è aperto (Step A e scheda Use Case),
-    // da lg in su la pagina si restringe per non finirgli sotto.
+    // Quando il pannello dell'assistente è aperto, da lg in su la pagina si
+    // restringe per non finirgli sotto.
     <div className="min-h-screen bg-ifab-bg transition-[padding] lg:has-[aside[data-assistant=open]]:pr-[380px]">
       <header className="border-b border-ifab-border bg-white px-4 py-3 sm:px-8">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
@@ -255,46 +234,72 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
       )}
 
       <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-4 pt-4 sm:px-8">
-        {tabs.map((t) => (
-          <Fragment key={t.key}>
-            {/* Separatore fra gli step del Blocco 1 e la scheda del Blocco 2 */}
-            {t.key === "UC" && <span className="mx-1 hidden h-6 w-px bg-ifab-border sm:block" />}
-            <button
-              onClick={() => t.unlocked && handleTabChange(t.key)}
-              disabled={!t.unlocked}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                tab === t.key ? "bg-ifab-navy text-white" : "bg-white text-ifab-navy border border-ifab-border"
-              }`}
-            >
-              {!t.unlocked && <Lock size={13} />}
-              {t.label}
-            </button>
-          </Fragment>
-        ))}
+        {tabs.map((t) => {
+          const unlocked = unlockedSteps[TAB_TO_STEP[t.key]];
+          return (
+            <Fragment key={t.key}>
+              {/* Separatore fra gli step del Blocco 1 e la scheda del Blocco 2 */}
+              {t.key === "UC" && <span className="mx-1 hidden h-6 w-px bg-ifab-border sm:block" />}
+              <button
+                onClick={() => unlocked && handleTabChange(t.key)}
+                disabled={!unlocked}
+                className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  tab === t.key ? "bg-ifab-navy text-white" : "bg-white text-ifab-navy border border-ifab-border"
+                }`}
+              >
+                {!unlocked && <Lock size={13} />}
+                {t.label}
+              </button>
+            </Fragment>
+          );
+        })}
       </nav>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-8">
-        {tab === "A" && (
-          <StepA
+        {tab === "1" && (
+          <Step1Activities
             code={code}
             participantId={identity.participantId}
-            initialData={stepA}
-            locked={!unlockedSteps.A}
-            onSaved={(data: StepASubmission) => updateSubmission({ stepA: data })}
+            data={step1}
+            locked={!unlockedSteps.step1}
+            onSaved={(data: Step1Submission) => updateSubmission({ step1: { ...step1, ...data } })}
           />
         )}
-        {tab === "B" && (
-          <StepB
+        {tab === "2" && (
+          <Step2Effort
             code={code}
             participantId={identity.participantId}
-            stepA={stepA}
-            stepB={stepB}
-            unlockedSteps={unlockedSteps}
-            initialDimension={stepBDimension}
-            onDimensionChange={handleStepBDimension}
-            onSaved={(dimension: StepBKey, data: NonNullable<StepBSubmission[StepBKey]>) =>
-              updateSubmission({ stepB: { ...stepB, [dimension]: { ...stepB?.[dimension], ...data } } })
+            step1={step1}
+            step2={step2}
+            locked={!unlockedSteps.step2}
+            onSaved={(data: Step2Submission) =>
+              updateSubmission({ step2: { ...step2, ...data, effort: { ...step2?.effort, ...data.effort } } })
             }
+          />
+        )}
+        {tab === "3" && (
+          <Step3Characteristics
+            code={code}
+            participantId={identity.participantId}
+            step2={step2}
+            step3={step3}
+            locked={!unlockedSteps.step3}
+            onSaved={(data: Step3Submission) =>
+              updateSubmission({
+                step3: { ...step3, ...data, risposte: { ...step3?.risposte, ...data.risposte } },
+              })
+            }
+          />
+        )}
+        {tab === "4" && (
+          <Step4Output
+            code={code}
+            participantId={identity.participantId}
+            participantName={identity.name}
+            step1={step1}
+            step2={step2}
+            step4={step4}
+            onGenerated={(data: Step4Submission) => updateSubmission({ step4: data })}
           />
         )}
         {tab === "UC" &&
@@ -302,7 +307,8 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
             <Block2Form
               code={code}
               participantId={identity.participantId}
-              stepA={stepA}
+              step1={step1}
+              step2={step2}
               block2={block2}
               onSaved={(data: Block2Submission) =>
                 updateSubmission({ block2: { ...block2, ...data, values: { ...block2?.values, ...data.values } } })
@@ -312,23 +318,6 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
             <div className="rounded-xl border border-dashed border-ifab-border bg-white p-8 text-center text-sm text-ifab-text-muted">
               <Lock className="mx-auto mb-2" size={20} />
               In attesa che il facilitatore sblocchi la scheda Use Case.
-            </div>
-          ))}
-        {tab === "C" &&
-          (unlockedSteps.C ? (
-            <StepC
-              code={code}
-              participantId={identity.participantId}
-              participantName={identity.name}
-              stepA={stepA}
-              stepB={stepB}
-              stepC={stepC}
-              onGenerated={(data: StepCSubmission) => updateSubmission({ stepC: data })}
-            />
-          ) : (
-            <div className="rounded-xl border border-dashed border-ifab-border bg-white p-8 text-center text-sm text-ifab-text-muted">
-              <Lock className="mx-auto mb-2" size={20} />
-              In attesa che il facilitatore sblocchi l&apos;output finale.
             </div>
           ))}
       </main>
