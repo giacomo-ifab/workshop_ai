@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOpenAI, CHAT_MODEL } from "@/lib/openaiClient";
-import {
-  COMPLETION_TOKEN,
-  buildStep1SystemPrompt,
-  buildStep2SystemPrompt,
-  buildStep3SystemPrompt,
-} from "@/config/block1Flow";
+import { buildStep1SystemPrompt, buildStep2SystemPrompt } from "@/config/block1Frizione";
 import { buildBlock2SystemPrompt } from "@/config/block2Form";
 
 /**
@@ -17,19 +12,15 @@ function systemPromptFor(
   subsection: string,
   context: {
     selectedActivityLabels?: string[];
-    characteristicLabels?: string[];
-    attivitaLabels?: string[];
     processoContext?: string;
     sectionLabel?: string;
   }
 ): string | null {
   switch (subsection) {
     case "step1":
-      return buildStep1SystemPrompt(context.selectedActivityLabels ?? []);
+      return buildStep1SystemPrompt();
     case "step2":
       return buildStep2SystemPrompt(context.selectedActivityLabels ?? []);
-    case "step3":
-      return buildStep3SystemPrompt(context.characteristicLabels ?? [], context.attivitaLabels ?? []);
     case "block2":
       return buildBlock2SystemPrompt(context.processoContext ?? "", context.sectionLabel);
     default:
@@ -63,11 +54,10 @@ export async function POST(req: Request) {
       temperature: 0.6,
     });
 
-    const reply = response.choices[0]?.message?.content ?? "";
-    const finished = reply.includes(COMPLETION_TOKEN);
-    const cleanReply = reply.replace(COMPLETION_TOKEN, "").trim();
-
-    return NextResponse.json({ reply: cleanReply, finished });
+    // Gli assistenti sono di supporto: non concludono step, quindi `finished`
+    // resta sempre false (il campo è mantenuto per il contratto con AgentChat).
+    const reply = (response.choices[0]?.message?.content ?? "").trim();
+    return NextResponse.json({ reply, finished: false });
   } catch (error) {
     console.error("Errore agente AI:", error);
     const message = error instanceof Error ? error.message : "Errore interno";

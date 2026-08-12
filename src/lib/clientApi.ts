@@ -111,13 +111,6 @@ export function submitStep2(code: string, participantId: string, data: import(".
   });
 }
 
-export function submitStep3(code: string, participantId: string, data: import("./types").Step3Submission) {
-  return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
-    method: "POST",
-    body: JSON.stringify({ participantId, part: "step3", data }),
-  });
-}
-
 export function submitBlock2(
   code: string,
   participantId: string,
@@ -133,13 +126,6 @@ export function saveProgress(code: string, participantId: string, progress: Part
   return jsonFetch<{ submission: Submission }>(`/api/session/${code}/submit`, {
     method: "POST",
     body: JSON.stringify({ participantId, part: "progress", data: progress }),
-  });
-}
-
-export function synthesizeStep4(code: string, participantId: string) {
-  return jsonFetch<{ submission: Submission }>(`/api/session/${code}/synthesize`, {
-    method: "POST",
-    body: JSON.stringify({ participantId }),
   });
 }
 

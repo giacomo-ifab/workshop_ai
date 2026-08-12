@@ -8,10 +8,9 @@ import { clearStoredIdentity, readStoredIdentity } from "@/lib/participantStorag
 import { ParticipantTab, Submission } from "@/lib/types";
 
 const TAB_LABELS: Record<ParticipantTab, string> = {
-  "1": "Step 1 · Attività svolte",
-  "2": "Step 2 · Tempo assorbito",
-  "3": "Step 3 · Caratteristiche",
-  "4": "Step 4 · Output",
+  "1": "Step 1 · Scheda di attrito",
+  "2": "Step 2 · Caratteristiche",
+  "3": "Step 3 · Esito",
   UC: "Blocco 2 · Use Case Submission",
 };
 
@@ -19,8 +18,7 @@ function describeProgress(submission: Submission): string {
   const tab = submission.progress?.tab;
   if (tab) return TAB_LABELS[tab];
   if (submission.block2?.updatedAt) return TAB_LABELS.UC;
-  if (submission.step4?.sintesi) return TAB_LABELS["4"];
-  if (submission.step3?.updatedAt) return TAB_LABELS["3"];
+  if (submission.step2?.completedAt) return TAB_LABELS["3"];
   if (submission.step2?.updatedAt) return TAB_LABELS["2"];
   return TAB_LABELS["1"];
 }

@@ -13,8 +13,9 @@ import {
   deleteSession,
 } from "@/lib/clientApi";
 import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStorage";
-import { CATEGORIES, labelForActivity } from "@/config/block1Flow";
+import { DOMANDE, DOMANDA_CRITERI_TACITI } from "@/config/block1Frizione";
 import { BLOCK2_FIELDS } from "@/config/block2Form";
+import { calcolaEsiti } from "@/lib/frizioneScoring";
 import { Participant, Submission, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 
 const POLL_MS = 4000;
@@ -22,10 +23,9 @@ const POLL_MS = 4000;
 const BLOCK2_FIELD_COUNT = BLOCK2_FIELDS.length;
 
 const STEP_ORDER: { key: keyof UnlockedSteps; label: string; block: 1 | 2 }[] = [
-  { key: "step1", label: "1 · Attività svolte", block: 1 },
-  { key: "step2", label: "2 · Tempo assorbito", block: 1 },
-  { key: "step3", label: "3 · Caratteristiche", block: 1 },
-  { key: "step4", label: "4 · Output", block: 1 },
+  { key: "step1", label: "1 · Scheda di attrito", block: 1 },
+  { key: "step2", label: "2 · Caratteristiche", block: 1 },
+  { key: "step3", label: "3 · Esito", block: 1 },
   { key: "useCase", label: "Use Case Submission", block: 2 },
 ];
 
@@ -133,10 +133,21 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
 
   if (!authChecked) return null;
 
-  const activityCounts = CATEGORIES.flatMap((c) => c.activities).map((act) => ({
-    attivita: act.label,
-    conteggio: rows.filter((r) => r.submission.step1?.attivitaSelezionate?.includes(act.key)).length,
-  }));
+  // Quante persone hanno segnalato attrito su ciascuna attività di riferimento
+  // (una domanda può mappare più attività: contano tutte).
+  const attivitaCounts = new Map<string, number>();
+  for (const { submission } of rows) {
+    const attivitaPersona = new Set<string>();
+    for (const domanda of DOMANDE) {
+      if (domanda.id === DOMANDA_CRITERI_TACITI) continue;
+      if (submission.step1?.risposte?.[String(domanda.id)]?.risposta !== "si") continue;
+      domanda.attivita.forEach((a) => attivitaPersona.add(a));
+    }
+    attivitaPersona.forEach((a) => attivitaCounts.set(a, (attivitaCounts.get(a) ?? 0) + 1));
+  }
+  const activityCounts = Array.from(attivitaCounts.entries())
+    .map(([attivita, conteggio]) => ({ attivita, conteggio }))
+    .sort((a, b) => b.conteggio - a.conteggio);
 
   return (
     <div className="min-h-screen bg-ifab-navy">
@@ -273,21 +284,23 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                 <thead>
                   <tr className="border-b border-ifab-border text-ifab-text-muted">
                     <th className="py-2 pr-4">Nome</th>
-                    <th className="py-2 pr-4">Attività più onerose</th>
                     <th className="py-2 pr-4">Step 1</th>
                     <th className="py-2 pr-4">Step 2</th>
-                    <th className="py-2 pr-4">Step 3</th>
-                    <th className="py-2 pr-4">Output</th>
+                    <th className="py-2 pr-4">Candidata migliore</th>
+                    <th className="py-2 pr-4">Direzione</th>
                     <th className="py-2 pr-4">Use Case</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map(({ participant, submission }) => {
-                    const attivitaCount = submission.step1?.attivitaSelezionate?.length ?? 0;
-                    const top = submission.step2?.topAttivita ?? [];
-                    const risposte = Object.values(submission.step3?.risposte ?? {}).filter((v) =>
-                      Boolean(v && v.trim())
+                    const risposteDate = Object.values(submission.step1?.risposte ?? {}).filter(
+                      (r) => r?.risposta
                     ).length;
+                    const siDichiarati = Object.values(submission.step1?.risposte ?? {}).filter(
+                      (r) => r?.risposta === "si"
+                    ).length;
+                    const esiti = calcolaEsiti(submission.step1, submission.step2);
+                    const migliore = esiti[0];
                     // Blocco 2: distingue "consegnata" (Salva scheda) da "in bozza".
                     const useCaseFilled = Object.values(submission.block2?.values ?? {}).filter((v) =>
                       Array.isArray(v) ? v.length > 0 : Boolean(v && v.trim())
@@ -299,25 +312,42 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                         : "—";
                     return (
                       <tr key={participant.participantId} className="border-b border-ifab-border">
-                        <td className="py-2 pr-4 font-medium text-ifab-text">{participant.name}</td>
+                        <td className="py-2 pr-4 font-medium text-ifab-text">
+                          {participant.name}
+                          {submission.step1?.criteriTaciti && (
+                            <span
+                              className="ml-1.5 text-amber-600"
+                              title="Ha dichiarato criteri non documentati sulle eccezioni"
+                            >
+                              ⚠
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {submission.step1?.completedAt
+                            ? `✅ ${siDichiarati} sì`
+                            : risposteDate > 0
+                              ? `${risposteDate}/${DOMANDE.length}`
+                              : "—"}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {submission.step2?.completedAt
+                            ? "✅"
+                            : Object.keys(submission.step2?.valori ?? {}).length > 0
+                              ? "in corso"
+                              : "—"}
+                        </td>
                         <td className="py-2 pr-4 text-ifab-text-muted">
-                          {top.length > 0 ? top.map(labelForActivity).join(", ") : "—"}
+                          {migliore ? `${migliore.nome} (${Math.round(migliore.punteggio)})` : "—"}
                         </td>
-                        <td className="py-2 pr-4">
-                          {submission.step1?.completedAt ? "✅" : attivitaCount > 0 ? `${attivitaCount} sel.` : "—"}
-                        </td>
-                        <td className="py-2 pr-4">{submission.step2?.completedAt ? "✅" : top.length > 0 ? "in corso" : "—"}</td>
-                        <td className="py-2 pr-4">
-                          {submission.step3?.completedAt ? "✅" : risposte > 0 ? `${risposte} risp.` : "—"}
-                        </td>
-                        <td className="py-2 pr-4">{submission.step4?.sintesi ? "✅" : "—"}</td>
+                        <td className="py-2 pr-4 text-ifab-text-muted">{migliore?.tecnologia ?? "—"}</td>
                         <td className="py-2 pr-4">{useCaseLabel}</td>
                       </tr>
                     );
                   })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-4 text-center text-ifab-text-muted">
+                      <td colSpan={6} className="py-4 text-center text-ifab-text-muted">
                         Nessun partecipante ancora connesso.
                       </td>
                     </tr>
@@ -328,7 +358,9 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
           </section>
 
           <section>
-            <h2 className="mb-3 text-sm font-semibold text-ifab-navy">Distribuzione attività selezionate</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ifab-navy">
+              Attrito segnalato per attività di riferimento
+            </h2>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={activityCounts} layout="vertical" margin={{ left: 24, right: 16 }}>

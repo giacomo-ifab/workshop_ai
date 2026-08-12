@@ -15,17 +15,14 @@ import {
   ParticipantTab,
   Step1Submission,
   Step2Submission,
-  Step3Submission,
-  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "@/lib/types";
 import { DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 import { nowMs } from "@/lib/time";
-import Step1Activities from "@/components/Step1Activities";
-import Step2Effort from "@/components/Step2Effort";
-import Step3Characteristics from "@/components/Step3Characteristics";
-import Step4Output from "@/components/Step4Output";
+import Step1Frizione from "@/components/Step1Frizione";
+import Step2Caratteristiche from "@/components/Step2Caratteristiche";
+import Step3Esito from "@/components/Step3Esito";
 import Block2Form from "@/components/Block2Form";
 
 const POLL_MS = 4000;
@@ -34,17 +31,12 @@ const TAB_TO_STEP: Record<ParticipantTab, keyof UnlockedSteps> = {
   "1": "step1",
   "2": "step2",
   "3": "step3",
-  "4": "step4",
   UC: "useCase",
 };
 
 function hasWork(submission: Submission): boolean {
   return Boolean(
-    submission.step1?.updatedAt ||
-      submission.step2?.updatedAt ||
-      submission.step3?.updatedAt ||
-      submission.step4?.sintesi ||
-      submission.block2?.updatedAt
+    submission.step1?.updatedAt || submission.step2?.updatedAt || submission.block2?.updatedAt
   );
 }
 
@@ -159,7 +151,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     return <div className="flex min-h-screen items-center justify-center bg-ifab-bg text-sm text-ifab-text-muted">Caricamento...</div>;
   }
 
-  const { step1, step2, step3, step4, block2 } = submission;
+  const { step1, step2, block2 } = submission;
 
   function updateSubmission(patch: Partial<Submission>) {
     setSubmission((prev) => ({ ...(prev as Submission), ...patch }));
@@ -185,10 +177,9 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
   }
 
   const tabs: { key: ParticipantTab; label: string }[] = [
-    { key: "1", label: "1 · Attività" },
-    { key: "2", label: "2 · Tempo assorbito" },
-    { key: "3", label: "3 · Caratteristiche" },
-    { key: "4", label: "4 · Output" },
+    { key: "1", label: "1 · Scheda di attrito" },
+    { key: "2", label: "2 · Caratteristiche" },
+    { key: "3", label: "3 · Esito" },
     { key: "UC", label: "Use Case" },
   ];
 
@@ -257,51 +248,29 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-8">
         {tab === "1" && (
-          <Step1Activities
+          <Step1Frizione
             code={code}
             participantId={identity.participantId}
             data={step1}
             locked={!unlockedSteps.step1}
-            onSaved={(data: Step1Submission) => updateSubmission({ step1: { ...step1, ...data } })}
+            onSaved={(data: Step1Submission) =>
+              updateSubmission({ step1: { ...step1, ...data, risposte: data.risposte ?? step1?.risposte } })
+            }
           />
         )}
         {tab === "2" && (
-          <Step2Effort
+          <Step2Caratteristiche
             code={code}
             participantId={identity.participantId}
             step1={step1}
             step2={step2}
             locked={!unlockedSteps.step2}
             onSaved={(data: Step2Submission) =>
-              updateSubmission({ step2: { ...step2, ...data, effort: { ...step2?.effort, ...data.effort } } })
+              updateSubmission({ step2: { ...step2, ...data, valori: { ...step2?.valori, ...data.valori } } })
             }
           />
         )}
-        {tab === "3" && (
-          <Step3Characteristics
-            code={code}
-            participantId={identity.participantId}
-            step2={step2}
-            step3={step3}
-            locked={!unlockedSteps.step3}
-            onSaved={(data: Step3Submission) =>
-              updateSubmission({
-                step3: { ...step3, ...data, risposte: { ...step3?.risposte, ...data.risposte } },
-              })
-            }
-          />
-        )}
-        {tab === "4" && (
-          <Step4Output
-            code={code}
-            participantId={identity.participantId}
-            participantName={identity.name}
-            step1={step1}
-            step2={step2}
-            step4={step4}
-            onGenerated={(data: Step4Submission) => updateSubmission({ step4: data })}
-          />
-        )}
+        {tab === "3" && <Step3Esito participantName={identity.name} step1={step1} step2={step2} />}
         {tab === "UC" &&
           (unlockedSteps.useCase ? (
             <Block2Form

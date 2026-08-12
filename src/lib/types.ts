@@ -1,37 +1,17 @@
 // Tipi condivisi per il modello dati del workshop.
-// Blocco 1 — Identificazione Opportunità, in 4 step:
-//   1. selezione delle attività svolte
-//   2. stima del tempo assorbito (durata × frequenza × persone) e top 3
-//   3. caratteristiche delle attività più onerose (una caratteristica per gruppo)
-//   4. output: sintesi AI, profilo e PDF
+// Blocco 1 — Scheda di attrito, in 3 step:
+//   1. 21 domande sì/no; su ogni sì, impatto 1-10 (e nome dell'attività)
+//   2. per le 3 candidate a impatto più alto, una caratteristica 1-10
+//   3. esito calcolato: prontezza, punteggio, tecnologia, supervisione, matrice
 // Blocco 2 — Use Case Submission (form su una pagina).
 
-/** Gruppo di attività: a ogni gruppo corrisponde una sola caratteristica da indagare. */
-export type CategoryKey = "ripetitive" | "analisiDati" | "documentazione" | "decisioni";
-
-/** Caratteristica indagata nello Step 3. */
-export type CharacteristicKey = "variabilita" | "dati" | "docStandard" | "criteri";
-
-export const CHARACTERISTIC_KEYS: CharacteristicKey[] = [
-  "variabilita",
-  "dati",
-  "docStandard",
-  "criteri",
-];
-
-// Mappa 1:1 gruppo di attività → caratteristica (schema attività/caratteristiche del workshop)
-export const CATEGORY_TO_CHARACTERISTIC: Record<CategoryKey, CharacteristicKey> = {
-  ripetitive: "variabilita",
-  analisiDati: "dati",
-  documentazione: "docStandard",
-  decisioni: "criteri",
-};
+/** Blocco di appartenenza di una domanda: decide caratteristica e tecnologia. */
+export type FrizioneBlocco = "sposti" | "controlli" | "scrivi" | "decidi";
 
 export type UnlockedSteps = {
   step1: boolean;
   step2: boolean;
   step3: boolean;
-  step4: boolean;
   // Blocco 2 — Use Case Submission (un unico form, sbloccato in blocco).
   useCase: boolean;
 };
@@ -40,7 +20,6 @@ export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
   step1: false,
   step2: false,
   step3: false,
-  step4: false,
   useCase: false,
 };
 
@@ -64,57 +43,37 @@ export type ChatMessage = {
   content: string;
 };
 
-/** Step 1 — quali attività svolgo (più di una) e in quale contesto organizzativo. */
+/**
+ * Risposta a una domanda della scheda di attrito. `impatto` e `nome` esistono
+ * solo quando la risposta è "si": passando a "no" il dato viene scartato.
+ */
+export type Step1Answer = {
+  risposta: "si" | "no";
+  impatto?: number; // 1-10, nessun valore finché il partecipante non muove la barra
+  nome?: string; // come il partecipante chiama questa attività
+};
+
 export type Step1Submission = {
-  dipartimento?: string;
-  areaFunzionale?: string;
-  attivitaSelezionate?: string[]; // chiavi delle attività scelte (es. "ricopiature")
+  risposte?: Record<string, Step1Answer>; // chiave: id domanda come stringa
+  /** Domanda 21: le eccezioni si gestiscono con criteri non documentati. */
+  criteriTaciti?: boolean;
   chatLog?: ChatMessage[];
   updatedAt?: number; // ultimo salvataggio automatico della bozza
   completedAt?: number;
 };
 
-export type FrequenzaPeriodo = "giorno" | "settimana" | "mese" | "anno";
-
 /**
- * Step 2 — stima dell'impegno per una singola attività. I valori restano
- * separati (non pre-moltiplicati) così la stima si può correggere e il calcolo
- * ore/anno resta trasparente e ricalcolabile ovunque serva.
+ * Step 2 — un valore 1-10 per candidata (la caratteristica dipende dal blocco
+ * della domanda di origine). `candidate` congela le tre candidate al momento
+ * della conclusione dello step, così modifiche successive allo Step 1 non
+ * rimescolano un esito già calcolato.
  */
-export type AttivitaEffort = {
-  durataMinuti?: number; // durata media di una esecuzione
-  frequenzaNumero?: number; // quante volte per periodo
-  frequenzaPeriodo?: FrequenzaPeriodo;
-  persone?: number; // persone che svolgono l'attività
-};
-
 export type Step2Submission = {
-  effort?: Record<string, AttivitaEffort>; // per chiave attività
-  /** Le (massimo) 3 attività più onerose, confermate dal partecipante. */
-  topAttivita?: string[];
+  valori?: Record<string, number>; // chiave: id domanda come stringa
+  candidate?: number[];
   chatLog?: ChatMessage[];
   updatedAt?: number;
-  completedAt?: number;
-};
-
-/**
- * Step 3 — risposte alle domande sulle caratteristiche. Chiave della risposta:
- * `${caratteristica}:${idDomanda}` (le domande vivono in `config/block1Flow.ts`).
- */
-export type Step3Submission = {
-  risposte?: Record<string, string>;
-  chatLog?: ChatMessage[];
-  updatedAt?: number;
-  completedAt?: number;
-};
-
-export type ProfiloScores = Partial<Record<CharacteristicKey, number>>; // punteggi 1-5 solo descrittivi, non prescrittivi
-
-/** Step 4 — output del Blocco 1. */
-export type Step4Submission = {
-  sintesi?: string;
-  profilo?: ProfiloScores;
-  generatedAt?: number;
+  completedAt?: number; // dopo la conclusione gli slider non sono più modificabili
 };
 
 /**
@@ -132,7 +91,7 @@ export type Block2Submission = {
   completedAt?: number;
 };
 
-export type ParticipantTab = "1" | "2" | "3" | "4" | "UC";
+export type ParticipantTab = "1" | "2" | "3" | "UC";
 
 /**
  * Punto in cui il partecipante stava lavorando: salvato lato server insieme
@@ -148,8 +107,8 @@ export type Submission = {
   participantId: string;
   step1?: Step1Submission;
   step2?: Step2Submission;
-  step3?: Step3Submission;
-  step4?: Step4Submission;
+  // Lo Step 3 non ha dati propri: l'esito è calcolato da step1 + step2
+  // (vedi lib/frizioneScoring.ts), così non può divergere da ciò che si vede.
   block2?: Block2Submission;
   progress?: ParticipantProgress;
 };
@@ -163,19 +122,3 @@ export type SessionSummary = {
   lastActivityAt: number;
 };
 
-/** Ore/anno assorbite da un'attività: durata × frequenza annua × persone. */
-export function oreAnnue(effort: AttivitaEffort | undefined): number | null {
-  if (!effort) return null;
-  const { durataMinuti, frequenzaNumero, frequenzaPeriodo, persone } = effort;
-  if (!durataMinuti || !frequenzaNumero || !frequenzaPeriodo) return null;
-
-  const perAnno: Record<FrequenzaPeriodo, number> = {
-    giorno: 220, // giorni lavorativi in un anno
-    settimana: 44, // settimane lavorative
-    mese: 11, // mesi lavorativi
-    anno: 1,
-  };
-
-  const esecuzioniAnno = frequenzaNumero * perAnno[frequenzaPeriodo];
-  return (durataMinuti / 60) * esecuzioniAnno * (persone && persone > 0 ? persone : 1);
-}

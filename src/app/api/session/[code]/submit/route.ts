@@ -1,21 +1,10 @@
 import { NextResponse } from "next/server";
-import {
-  getParticipants,
-  saveBlock2,
-  saveProgress,
-  saveStep1,
-  saveStep2,
-  saveStep3,
-  saveStep4,
-} from "@/lib/session";
-
+import { getParticipants, saveBlock2, saveProgress, saveStep1, saveStep2 } from "@/lib/session";
 import {
   Block2Submission,
   ParticipantProgress,
   Step1Submission,
   Step2Submission,
-  Step3Submission,
-  Step4Submission,
   Submission,
 } from "@/lib/types";
 
@@ -40,12 +29,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       break;
     case "step2":
       submission = await saveStep2(code, participantId, data as Step2Submission);
-      break;
-    case "step3":
-      submission = await saveStep3(code, participantId, data as Step3Submission);
-      break;
-    case "step4":
-      submission = await saveStep4(code, participantId, data as Step4Submission);
       break;
     case "block2":
       submission = await saveBlock2(code, participantId, data as Block2Submission);

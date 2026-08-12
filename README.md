@@ -2,14 +2,22 @@
 
 App interattiva per condurre dal vivo il workshop di AI Adoption. Il facilitatore sblocca gli step uno alla volta, i partecipanti (identificati dal solo nome) compilano ogni step con un assistente AI a fianco.
 
-## Come funziona il Blocco 1 — Identificazione Opportunità
+## Come funziona il Blocco 1 — Scheda di attrito
 
-- **Step 1 — Attività svolte**: contesto minimo (dipartimento, area funzionale) e selezione multipla delle attività dall'elenco raggruppato per tipologia. L'assistente spiega che cosa si intende per ciascuna voce e in quale voce rientra un'attività raccontata a parole.
-- **Step 2 — Tempo assorbito**: per ogni attività selezionata si indicano durata media, frequenza (giorno/settimana/mese/anno) e persone coinvolte; l'app calcola le **ore/anno** (durata × frequenza annua × persone) e propone le **3 attività più onerose**, che il partecipante può confermare o cambiare. È un form, non una chat: il dato serve calcolabile e confrontabile fra partecipanti. L'assistente aiuta a stimare i valori mancanti.
-- **Step 3 — Caratteristiche**: a ogni attività corrisponde **una** caratteristica da indagare, decisa dal gruppo a cui appartiene (Variabilità · Disponibilità e qualità dei dati · Documenti standard · Criteri e regole definite). Per ciascuna, **una o due domande** a risposta libera; se due delle tre attività ricadono sulla stessa caratteristica la si chiede una volta sola, indicando quali attività copre. L'assistente spiega le domande e aiuta a rendere concrete le risposte.
-- **Step 4 — Output**: sintesi descrittiva generata dall'AI, classifica delle attività per ore/anno, radar delle caratteristiche indagate ed export PDF. (Nessuna raccomandazione di approccio AI qui: arriverà a fine workshop.)
+- **Step 1 — Scheda di attrito**: 21 domande sì/no in elenco unico (i quattro blocchi restano interni). Su ogni sì si apre un nome facoltativo per l'attività e lo **slider Impatto 1-10**, senza valore preimpostato: va mosso. Tornando al no, i campi si chiudono e il dato viene scartato. Contatore risposte in alto, avviso non bloccante oltre 8 sì, messaggio dedicato se non c'è nessun sì. La **domanda 21** (eccezioni gestite con criteri non documentati) è una spia: non apre lo slider, non concorre alle candidate, alza solo il flag `criteriTaciti`.
+- **Step 2 — Caratteristiche delle tre candidate**: le tre attività con impatto più alto (a parità vince quella dichiarata prima), una scheda alla volta con navigazione avanti/indietro. Un solo slider per scheda, deciso dal blocco della domanda di origine (costanza del formato · disponibilità dei dati · template e fonti · esplicitezza dei criteri). Nessun punteggio o anteprima; concludendo lo step le risposte si bloccano e le candidate vengono congelate.
+- **Step 3 — Esito**: **matrice Impatto × Prontezza in SVG inline** con i quattro quadranti nominati e le candidate posizionate, poi una scheda per candidata in ordine di punteggio con direzione tecnologica, livello di supervisione e riga di motivazione. Export PDF.
 
-L'abbinamento attività → caratteristica e le domande vivono in `src/config/block1Flow.ts`: modificarli lì aggiorna form, prompt degli agenti e sintesi finale.
+Calcolo (in `src/lib/frizioneScoring.ts`, unico punto di verità, usato anche dalla dashboard):
+
+```
+prontezza = blocco "sposti" ? max(0, 10 - |valore - 5.5| × 2) : valore   // campana: l'ottimo è al centro
+punteggio = impatto × prontezza                                          // prodotto, non somma: 0-100
+```
+
+I knockout hanno la precedenza sulla tecnologia standard e si valutano in ordine: formato costante (≤2 su "sposti") → automazione classica RPA; formato sempre diverso (≥9) → capacità interpretativa e human-in-the-loop; valore ≤3 sugli altri blocchi → prima data readiness. I due estremi di "sposti" ricevono lo stesso punteggio per effetto della campana ma **messaggi opposti**. La supervisione scende a human-in-the-loop su ogni caso quando `criteriTaciti` è vero, con nota esplicita.
+
+Domande, ancoraggi, tecnologie e messaggi vivono in `src/config/block1Frizione.ts`.
 
 Il facilitatore sblocca ogni step dalla propria dashboard; i partecipanti vedono lo sblocco entro pochi secondi (polling).
 
@@ -30,7 +38,7 @@ Tutto lo stato vive lato server (Redis, TTL 48h): chiudere il browser, ricaricar
 - L'identità (codice sessione + participantId + nome) resta nel `localStorage`: riaprendo l'app compare in home la card **"Riprendi"**, e su `/join` il pulsante **"Rientra nella sessione"** — senza ridigitare nulla.
 - Da un altro dispositivo (o dopo aver svuotato il browser) basta rientrare su `/join` con lo **stesso codice e lo stesso nome**: il match sul nome normalizzato ricollega alla stessa submission.
 - Tutti gli step **si autosalvano** dopo ~1 secondo di inattività (e all'uscita dallo step), quindi anche la bozza non ancora confermata viene ripristinata.
-- Viene ripristinato anche il **punto in cui ci si era interrotti** (step 1-4 o scheda Use Case), salvato lato server a ogni cambio step.
+- Viene ripristinato anche il **punto in cui ci si era interrotti** (step 1-3 o scheda Use Case), salvato lato server a ogni cambio step.
 - Se la sessione è scaduta o il partecipante non risulta più registrato, si viene riportati a `/join` con un avviso, invece di restare su una pagina in caricamento.
 
 **Facilitatore**
@@ -73,17 +81,17 @@ src/
 │   ├── join/page.tsx                 # ingresso partecipante
 │   ├── facilitator/login/page.tsx    # login facilitatore
 │   ├── facilitator/[code]/page.tsx   # dashboard facilitatore
-│   ├── session/[code]/page.tsx       # vista partecipante (step 1-4 + Use Case)
-│   └── api/                          # route handler (auth, sessione, agente AI, sintesi)
+│   ├── session/[code]/page.tsx       # vista partecipante (step 1-3 + Use Case)
+│   └── api/                          # route handler (auth, sessione, agente AI)
 │       ├── session/list              # sessioni attive: rientro del facilitatore
 │       └── session/[code]/resume     # rientro del partecipante con identità salvata
-├── components/                       # Step1Activities, Step2Effort, Step3Characteristics,
-│                                     # Step4Output, Block2Form, AgentChat,
+├── components/                       # Step1Frizione, Step2Caratteristiche, Step3Esito,
+│                                     # MatriceImpattoProntezza (SVG), Block2Form, AgentChat,
 │                                     # AssistantPanel (pannello fisso a destra), ResumeCard
-├── config/block1Flow.ts              # Blocco 1: attività, abbinamento caratteristiche, domande, prompt
+├── config/block1Frizione.ts          # Blocco 1: 21 domande, ancoraggi, tecnologie, messaggi, prompt
 ├── config/block2Form.ts              # scheda Use Case del Blocco 2 (sezioni, campi, prompt agente)
-└── lib/                              # tipi, client Redis, helper sessione, auth, client API,
-                                      # participantStorage (identità salvata nel browser)
+└── lib/                              # tipi, frizioneScoring (calcolo esito), client Redis,
+                                      # helper sessione, auth, client API, participantStorage
 ```
 
 ## Estendere ai blocchi successivi

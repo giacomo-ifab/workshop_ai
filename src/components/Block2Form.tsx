@@ -8,7 +8,7 @@ import {
   Block2Section,
   INITIAL_MESSAGE_BLOCK2,
 } from "@/config/block2Form";
-import { labelForActivity } from "@/config/block1Flow";
+import { calcolaEsiti, candidateAttive } from "@/lib/frizioneScoring";
 import { Block2FieldValue, Block2Submission, ChatMessage, Step1Submission, Step2Submission } from "@/lib/types";
 import { submitBlock2 } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
@@ -61,14 +61,15 @@ export default function Block2Form({
   const onSavedRef = useRef(onSaved);
   const chatRef = useRef<AgentChatHandle>(null);
 
-  // Contesto per l'agente: le attività più onerose emerse dal Blocco 1.
-  const processoContext = [
-    (step2?.topAttivita ?? []).map(labelForActivity).join(", "),
-    step1?.dipartimento,
-    step1?.areaFunzionale,
-  ]
-    .filter(Boolean)
-    .join(" — ");
+  // Contesto per l'agente: la candidata migliore del Blocco 1 (o, se l'esito
+  // non è ancora calcolabile, le attività segnalate come più impattanti).
+  const esiti = calcolaEsiti(step1, step2);
+  const processoContext =
+    esiti.length > 0
+      ? `${esiti[0].nome} (direzione indicata: ${esiti[0].tecnologia})`
+      : candidateAttive(step1, step2)
+          .map((c) => c.nome)
+          .join(", ");
   const compiled = BLOCK2_SECTIONS.flatMap((s) => s.fields).filter((f) => isFilled(values[f.id])).length;
 
   useEffect(() => {
