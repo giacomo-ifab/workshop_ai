@@ -6,7 +6,8 @@ App interattiva per condurre dal vivo il workshop di AI Adoption. Il facilitator
 
 - **Step 1 — Scheda di attrito**: 21 domande sì/no in elenco unico (i quattro blocchi restano interni). Su ogni sì si apre un nome facoltativo per l'attività e lo **slider Impatto 1-10**, senza valore preimpostato: va mosso. Tornando al no, i campi si chiudono e il dato viene scartato. Contatore risposte in alto, avviso non bloccante oltre 8 sì, messaggio dedicato se non c'è nessun sì. La **domanda 21** (eccezioni gestite con criteri non documentati) è una spia: non apre lo slider, non concorre alle candidate, alza solo il flag `criteriTaciti`.
 - **Step 2 — Caratteristiche delle tre candidate**: le tre attività con impatto più alto (a parità vince quella dichiarata prima), una scheda alla volta con navigazione avanti/indietro. Un solo slider per scheda, deciso dal blocco della domanda di origine (costanza del formato · disponibilità dei dati · template e fonti · esplicitezza dei criteri). Nessun punteggio o anteprima; concludendo lo step le risposte si bloccano e le candidate vengono congelate.
-- **Step 3 — Esito**: **matrice Impatto × Prontezza in SVG inline** con i quattro quadranti nominati e le candidate posizionate, poi una scheda per candidata in ordine di punteggio con direzione tecnologica, livello di supervisione e riga di motivazione. Export PDF.
+- **Step 3 — Esito**: **matrice Impatto × Prontezza in SVG inline** con i quattro quadranti nominati e le candidate posizionate, poi una scheda per candidata in ordine di punteggio con la riga di motivazione che spiega la posizione. Export PDF.
+- **Step 4 — Descrizione**: per l'attività risultata prima in classifica, un campo di testo libero dove raccontare com'è oggi il processo e qual è il problema individuato. È la base su cui si appoggia la scheda Use Case del Blocco 2.
 
 Calcolo (in `src/lib/frizioneScoring.ts`, unico punto di verità, usato anche dalla dashboard):
 
@@ -15,7 +16,7 @@ prontezza = blocco "sposti" ? max(0, 10 - |valore - 5.5| × 2) : valore   // cam
 punteggio = impatto × prontezza                                          // prodotto, non somma: 0-100
 ```
 
-I knockout hanno la precedenza sulla tecnologia standard e si valutano in ordine: formato costante (≤2 su "sposti") → automazione classica RPA; formato sempre diverso (≥9) → capacità interpretativa e human-in-the-loop; valore ≤3 sugli altri blocchi → prima data readiness. I due estremi di "sposti" ricevono lo stesso punteggio per effetto della campana ma **messaggi opposti**. La supervisione scende a human-in-the-loop su ogni caso quando `criteriTaciti` è vero, con nota esplicita.
+I casi limite si valutano in ordine e cambiano la lettura della posizione (non il punteggio): formato costante (≤2 su "sposti"), formato sempre diverso (≥9), valore ≤3 sugli altri blocchi. I due estremi di "sposti" ricevono lo stesso punteggio per effetto della campana ma **messaggi opposti**. Se `criteriTaciti` è vero compare la nota esplicita sulla formalizzazione dei criteri.
 
 Domande, ancoraggi, tecnologie e messaggi vivono in `src/config/block1Frizione.ts`.
 
@@ -38,7 +39,7 @@ Tutto lo stato vive lato server (Redis, TTL 48h): chiudere il browser, ricaricar
 - L'identità (codice sessione + participantId + nome) resta nel `localStorage`: riaprendo l'app compare in home la card **"Riprendi"**, e su `/join` il pulsante **"Rientra nella sessione"** — senza ridigitare nulla.
 - Da un altro dispositivo (o dopo aver svuotato il browser) basta rientrare su `/join` con lo **stesso codice e lo stesso nome**: il match sul nome normalizzato ricollega alla stessa submission.
 - Tutti gli step **si autosalvano** dopo ~1 secondo di inattività (e all'uscita dallo step), quindi anche la bozza non ancora confermata viene ripristinata.
-- Viene ripristinato anche il **punto in cui ci si era interrotti** (step 1-3 o scheda Use Case), salvato lato server a ogni cambio step.
+- Viene ripristinato anche il **punto in cui ci si era interrotti** (step 1-4 o scheda Use Case), salvato lato server a ogni cambio step.
 - Se la sessione è scaduta o il partecipante non risulta più registrato, si viene riportati a `/join` con un avviso, invece di restare su una pagina in caricamento.
 
 **Facilitatore**
@@ -81,12 +82,13 @@ src/
 │   ├── join/page.tsx                 # ingresso partecipante
 │   ├── facilitator/login/page.tsx    # login facilitatore
 │   ├── facilitator/[code]/page.tsx   # dashboard facilitatore
-│   ├── session/[code]/page.tsx       # vista partecipante (step 1-3 + Use Case)
+│   ├── session/[code]/page.tsx       # vista partecipante (step 1-4 + Use Case)
 │   └── api/                          # route handler (auth, sessione, agente AI)
 │       ├── session/list              # sessioni attive: rientro del facilitatore
 │       └── session/[code]/resume     # rientro del partecipante con identità salvata
 ├── components/                       # Step1Frizione, Step2Caratteristiche, Step3Esito,
-│                                     # MatriceImpattoProntezza (SVG), Block2Form, AgentChat,
+│                                     # Step4Descrizione, MatriceImpattoProntezza (SVG),
+│                                     # Block2Form, AgentChat,
 │                                     # AssistantPanel (pannello fisso a destra), ResumeCard
 ├── config/block1Frizione.ts          # Blocco 1: 21 domande, ancoraggi, tecnologie, messaggi, prompt
 ├── config/block2Form.ts              # scheda Use Case del Blocco 2 (sezioni, campi, prompt agente)

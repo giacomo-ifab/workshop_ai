@@ -9,6 +9,7 @@ import {
   SessionSummary,
   Step1Submission,
   Step2Submission,
+  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "./types";
@@ -287,6 +288,19 @@ export async function saveBlock2(
     ...data,
     values: { ...current.block2?.values, ...data.values },
   };
+  await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
+  return current;
+}
+
+/** Step 4 — descrizione dell'attività prima in classifica. */
+export async function saveStep4(
+  code: string,
+  participantId: string,
+  data: Step4Submission
+): Promise<Submission> {
+  const redis = getRedis();
+  const current = await getSubmission(code, participantId);
+  current.step4 = { ...current.step4, ...data };
   await redis.set(keySubmission(code, participantId), current, { ex: SESSION_TTL_SECONDS });
   return current;
 }

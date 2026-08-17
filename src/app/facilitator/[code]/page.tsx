@@ -26,6 +26,7 @@ const STEP_ORDER: { key: keyof UnlockedSteps; label: string; block: 1 | 2 }[] = 
   { key: "step1", label: "1 · Scheda di attrito", block: 1 },
   { key: "step2", label: "2 · Caratteristiche", block: 1 },
   { key: "step3", label: "3 · Esito", block: 1 },
+  { key: "step4", label: "4 · Descrizione", block: 1 },
   { key: "useCase", label: "Use Case Submission", block: 2 },
 ];
 
@@ -287,7 +288,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                     <th className="py-2 pr-4">Step 1</th>
                     <th className="py-2 pr-4">Step 2</th>
                     <th className="py-2 pr-4">Candidata migliore</th>
-                    <th className="py-2 pr-4">Direzione</th>
+                    <th className="py-2 pr-4">Descrizione</th>
                     <th className="py-2 pr-4">Use Case</th>
                   </tr>
                 </thead>
@@ -340,7 +341,13 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                         <td className="py-2 pr-4 text-ifab-text-muted">
                           {migliore ? `${migliore.nome} (${Math.round(migliore.punteggio)})` : "—"}
                         </td>
-                        <td className="py-2 pr-4 text-ifab-text-muted">{migliore?.tecnologia ?? "—"}</td>
+                        <td className="py-2 pr-4">
+                          {submission.step4?.completedAt
+                            ? "✅"
+                            : submission.step4?.descrizione?.trim()
+                              ? "in bozza"
+                              : "—"}
+                        </td>
                         <td className="py-2 pr-4">{useCaseLabel}</td>
                       </tr>
                     );

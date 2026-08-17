@@ -150,36 +150,13 @@ export const CARATTERISTICHE: Record<FrizioneBlocco, CaratteristicaSlider> = {
 
 // --- Step 3: tecnologie, knockout, supervisione --------------------------
 
-export const TECNOLOGIA: Record<FrizioneBlocco, string> = {
-  sposti: "Document AI / NLP per l'estrazione, con regola di destinazione deterministica a valle",
-  controlli: "Machine learning e analytics predittiva",
-  scrivi: "GenAI con grounding sulle fonti interne (RAG)",
-  decidi: "Automazione decisionale con supervisione proporzionata al rischio",
-};
-
+/**
+ * Casi limite riconosciuti dal calcolo. Non producono più una raccomandazione
+ * tecnologica a schermo: servono a differenziare la lettura della posizione,
+ * in particolare i due estremi del blocco "sposti", che per effetto della
+ * campana ottengono lo stesso punteggio pur significando cose opposte.
+ */
 export type KnockoutKey = "rpa" | "interpretativa" | "readiness";
-
-export const KNOCKOUT: Record<KnockoutKey, { titolo: string; testo: string }> = {
-  rpa: {
-    titolo: "Automazione classica (RPA)",
-    testo:
-      "Il formato è costante: fattibile e conveniente, ma non richiede AI.",
-  },
-  interpretativa: {
-    titolo: "Serve capacità interpretativa e human-in-the-loop",
-    testo: "L'eterogeneità è tale da richiedere supervisione su ogni caso.",
-  },
-  readiness: {
-    titolo: "Prima data readiness / formalizzazione",
-    testo: "Le fondamenta non sono pronte: intervenire ora produce risultati non verificabili.",
-  },
-};
-
-export const SUPERVISIONE = {
-  campione: "Supervisione a campione",
-  humanInTheLoop: "Human-in-the-loop su ogni caso",
-  decisionSupport: "Solo decision support, nessuna automazione",
-} as const;
 
 export const NOTA_CRITERI_TACITI =
   "Hai dichiarato che le eccezioni si gestiscono con criteri non documentati. Prima di automatizzare la decisione, quei criteri vanno formalizzati.";

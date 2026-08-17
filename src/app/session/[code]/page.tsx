@@ -15,6 +15,7 @@ import {
   ParticipantTab,
   Step1Submission,
   Step2Submission,
+  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "@/lib/types";
@@ -23,6 +24,7 @@ import { nowMs } from "@/lib/time";
 import Step1Frizione from "@/components/Step1Frizione";
 import Step2Caratteristiche from "@/components/Step2Caratteristiche";
 import Step3Esito from "@/components/Step3Esito";
+import Step4Descrizione from "@/components/Step4Descrizione";
 import Block2Form from "@/components/Block2Form";
 
 const POLL_MS = 4000;
@@ -31,12 +33,16 @@ const TAB_TO_STEP: Record<ParticipantTab, keyof UnlockedSteps> = {
   "1": "step1",
   "2": "step2",
   "3": "step3",
+  "4": "step4",
   UC: "useCase",
 };
 
 function hasWork(submission: Submission): boolean {
   return Boolean(
-    submission.step1?.updatedAt || submission.step2?.updatedAt || submission.block2?.updatedAt
+    submission.step1?.updatedAt ||
+      submission.step2?.updatedAt ||
+      submission.step4?.updatedAt ||
+      submission.block2?.updatedAt
   );
 }
 
@@ -151,7 +157,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     return <div className="flex min-h-screen items-center justify-center bg-ifab-bg text-sm text-ifab-text-muted">Caricamento...</div>;
   }
 
-  const { step1, step2, block2 } = submission;
+  const { step1, step2, step4, block2 } = submission;
 
   function updateSubmission(patch: Partial<Submission>) {
     setSubmission((prev) => ({ ...(prev as Submission), ...patch }));
@@ -180,6 +186,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     { key: "1", label: "1 · Scheda di attrito" },
     { key: "2", label: "2 · Caratteristiche" },
     { key: "3", label: "3 · Esito" },
+    { key: "4", label: "4 · Descrizione" },
     { key: "UC", label: "Use Case" },
   ];
 
@@ -271,6 +278,17 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           />
         )}
         {tab === "3" && <Step3Esito participantName={identity.name} step1={step1} step2={step2} />}
+        {tab === "4" && (
+          <Step4Descrizione
+            code={code}
+            participantId={identity.participantId}
+            step1={step1}
+            step2={step2}
+            step4={step4}
+            locked={!unlockedSteps.step4}
+            onSaved={(data: Step4Submission) => updateSubmission({ step4: { ...step4, ...data } })}
+          />
+        )}
         {tab === "UC" &&
           (unlockedSteps.useCase ? (
             <Block2Form
@@ -278,6 +296,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
               participantId={identity.participantId}
               step1={step1}
               step2={step2}
+              step4={step4}
               block2={block2}
               onSaved={(data: Block2Submission) =>
                 updateSubmission({ block2: { ...block2, ...data, values: { ...block2?.values, ...data.values } } })

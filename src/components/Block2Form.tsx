@@ -9,7 +9,14 @@ import {
   INITIAL_MESSAGE_BLOCK2,
 } from "@/config/block2Form";
 import { calcolaEsiti, candidateAttive } from "@/lib/frizioneScoring";
-import { Block2FieldValue, Block2Submission, ChatMessage, Step1Submission, Step2Submission } from "@/lib/types";
+import {
+  Block2FieldValue,
+  Block2Submission,
+  ChatMessage,
+  Step1Submission,
+  Step2Submission,
+  Step4Submission,
+} from "@/lib/types";
 import { submitBlock2 } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
 import AgentChat, { AgentChatHandle } from "./AgentChat";
@@ -35,6 +42,7 @@ export default function Block2Form({
   participantId,
   step1,
   step2,
+  step4,
   block2,
   onSaved,
 }: {
@@ -42,6 +50,7 @@ export default function Block2Form({
   participantId: string;
   step1?: Step1Submission;
   step2?: Step2Submission;
+  step4?: Step4Submission;
   block2?: Block2Submission;
   onSaved: (data: Block2Submission) => void;
 }) {
@@ -61,15 +70,15 @@ export default function Block2Form({
   const onSavedRef = useRef(onSaved);
   const chatRef = useRef<AgentChatHandle>(null);
 
-  // Contesto per l'agente: la candidata migliore del Blocco 1 (o, se l'esito
-  // non è ancora calcolabile, le attività segnalate come più impattanti).
+  // Contesto per l'agente: la descrizione scritta nello Step 4, altrimenti la
+  // candidata migliore o, se l'esito non è ancora calcolabile, le candidate.
   const esiti = calcolaEsiti(step1, step2);
-  const processoContext =
-    esiti.length > 0
-      ? `${esiti[0].nome} (direzione indicata: ${esiti[0].tecnologia})`
-      : candidateAttive(step1, step2)
-          .map((c) => c.nome)
-          .join(", ");
+  const processoContext = [
+    esiti[0]?.nome ?? candidateAttive(step1, step2).map((c) => c.nome).join(", "),
+    step4?.descrizione?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" — ");
   const compiled = BLOCK2_SECTIONS.flatMap((s) => s.fields).filter((f) => isFilled(values[f.id])).length;
 
   useEffect(() => {

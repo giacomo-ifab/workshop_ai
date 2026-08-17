@@ -7,12 +7,9 @@ import {
   BLOCCHI,
   CARATTERISTICHE,
   DOMANDA_CRITERI_TACITI,
-  KNOCKOUT,
   KnockoutKey,
   NOTA_CRITERI_TACITI,
   NUMERO_CANDIDATE,
-  SUPERVISIONE,
-  TECNOLOGIA,
   domandaById,
   nomeSuggerito,
 } from "@/config/block1Frizione";
@@ -32,9 +29,8 @@ export type Esito = Candidata & {
   prontezza: number;
   /** Impatto × prontezza, 0-100. */
   punteggio: number;
+  /** Caso limite riconosciuto: cambia la lettura della posizione, non il punteggio. */
   knockout?: KnockoutKey;
-  tecnologia: string;
-  supervisione: string;
   motivazione: string;
   notaCriteriTaciti?: string;
   colore: string;
@@ -104,12 +100,6 @@ function knockoutDa(blocco: FrizioneBlocco, valore: number): KnockoutKey | undef
   return undefined;
 }
 
-function supervisioneDa(prontezza: number, criteriTaciti: boolean): string {
-  if (prontezza < 4) return SUPERVISIONE.decisionSupport;
-  if (prontezza >= 7 && !criteriTaciti) return SUPERVISIONE.campione;
-  return SUPERVISIONE.humanInTheLoop;
-}
-
 /** Riga di motivazione: spiega la posizione nella matrice, non il calcolo. */
 function motivazioneDa(
   blocco: FrizioneBlocco,
@@ -162,8 +152,6 @@ export function valutaCandidata(candidata: Candidata, valore: number, criteriTac
     prontezza,
     punteggio: candidata.impatto * prontezza,
     knockout,
-    tecnologia: knockout ? KNOCKOUT[knockout].titolo : TECNOLOGIA[candidata.blocco],
-    supervisione: supervisioneDa(prontezza, criteriTaciti),
     motivazione: motivazioneDa(candidata.blocco, candidata.impatto, prontezza, knockout, criteriTaciti),
     notaCriteriTaciti: criteriTaciti ? NOTA_CRITERI_TACITI : undefined,
     colore: BLOCCHI[candidata.blocco].colore,
@@ -179,11 +167,6 @@ export function calcolaEsiti(step1?: Step1Submission, step2?: Step2Submission): 
     .filter((c) => typeof valori[String(c.domandaId)] === "number")
     .map((c) => valutaCandidata(c, valori[String(c.domandaId)], criteriTaciti))
     .sort((a, b) => b.punteggio - a.punteggio || a.domandaId - b.domandaId);
-}
-
-/** Testo esteso del knockout, per la scheda di esito. */
-export function dettaglioKnockout(key: KnockoutKey): string {
-  return KNOCKOUT[key].testo;
 }
 
 /** Etichetta della caratteristica chiesta nello Step 2 per un blocco. */

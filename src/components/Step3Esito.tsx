@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { AlertTriangle, FileDown, ShieldCheck, Sparkles } from "lucide-react";
-import { KNOCKOUT } from "@/config/block1Frizione";
+import { AlertTriangle, FileDown } from "lucide-react";
 import { Step1Submission, Step2Submission } from "@/lib/types";
 import { calcolaEsiti, etichettaCaratteristica } from "@/lib/frizioneScoring";
 import MatriceImpattoProntezza from "./MatriceImpattoProntezza";
@@ -56,7 +55,7 @@ export default function Step3Esito({
         <div>
           <h2 className="mb-1 text-lg font-semibold text-ifab-navy">Step 3 · Esito</h2>
           <p className="text-sm text-ifab-text-muted">
-            Le tue candidate posizionate per impatto e prontezza, con la direzione tecnologica suggerita.
+            Le tue candidate posizionate per impatto e prontezza, in ordine di punteggio.
           </p>
         </div>
         <button
@@ -105,25 +104,7 @@ export default function Step3Esito({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg bg-ifab-bg-soft p-3">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold text-ifab-blue-dark">
-                    <Sparkles size={13} /> Direzione tecnologica
-                  </p>
-                  <p className="mt-1 text-sm text-ifab-text">{e.tecnologia}</p>
-                  {e.knockout && (
-                    <p className="mt-1 text-xs text-ifab-text-muted">{KNOCKOUT[e.knockout].testo}</p>
-                  )}
-                </div>
-                <div className="rounded-lg bg-ifab-bg-soft p-3">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold text-ifab-blue-dark">
-                    <ShieldCheck size={13} /> Livello di supervisione
-                  </p>
-                  <p className="mt-1 text-sm text-ifab-text">{e.supervisione}</p>
-                </div>
-              </div>
-
-              <p className="mt-3 text-sm text-ifab-text-muted">{e.motivazione}</p>
+              <p className="mt-4 text-sm text-ifab-text-muted">{e.motivazione}</p>
             </section>
           ))}
         </div>

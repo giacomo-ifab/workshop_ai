@@ -12,6 +12,7 @@ export type UnlockedSteps = {
   step1: boolean;
   step2: boolean;
   step3: boolean;
+  step4: boolean;
   // Blocco 2 — Use Case Submission (un unico form, sbloccato in blocco).
   useCase: boolean;
 };
@@ -20,6 +21,7 @@ export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
   step1: false,
   step2: false,
   step3: false,
+  step4: false,
   useCase: false,
 };
 
@@ -91,7 +93,19 @@ export type Block2Submission = {
   completedAt?: number;
 };
 
-export type ParticipantTab = "1" | "2" | "3" | "UC";
+/**
+ * Step 4 — descrizione a testo libero dell'attività risultata prima per
+ * punteggio. `attivitaId` registra a quale candidata si riferisce il testo,
+ * così resta leggibile anche se in seguito la classifica cambia.
+ */
+export type Step4Submission = {
+  attivitaId?: number;
+  descrizione?: string;
+  updatedAt?: number;
+  completedAt?: number;
+};
+
+export type ParticipantTab = "1" | "2" | "3" | "4" | "UC";
 
 /**
  * Punto in cui il partecipante stava lavorando: salvato lato server insieme
@@ -109,6 +123,7 @@ export type Submission = {
   step2?: Step2Submission;
   // Lo Step 3 non ha dati propri: l'esito è calcolato da step1 + step2
   // (vedi lib/frizioneScoring.ts), così non può divergere da ciò che si vede.
+  step4?: Step4Submission;
   block2?: Block2Submission;
   progress?: ParticipantProgress;
 };
