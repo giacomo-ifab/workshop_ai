@@ -7,6 +7,7 @@ import {
   DOMANDA_CRITERI_TACITI,
   DOMANDE,
   IMPATTO_ANCORAGGI,
+  IMPATTO_DEFAULT,
   IMPATTO_LABEL,
   IMPATTO_SOTTOTESTO,
   INITIAL_MESSAGE_STEP1,
@@ -23,9 +24,9 @@ import AssistantPanel from "./AssistantPanel";
 
 /**
  * Step 1 — scheda di attrito: 21 domande sì/no in elenco unico (i blocchi
- * restano interni). Sul sì si apre lo slider di impatto; tornando al no il
- * valore viene scartato, perché un impatto senza attrito dichiarato non
- * significa nulla.
+ * restano interni). Sul sì si aprono nome e barra di impatto, già posizionata
+ * al centro della scala; tornando al no il valore viene scartato, perché un
+ * impatto senza attrito dichiarato non significa nulla.
  */
 export default function Step1Frizione({
   code,
@@ -56,9 +57,6 @@ export default function Step1Frizione({
   const si = Object.entries(risposte).filter(([, r]) => r?.risposta === "si");
   const candidateCount = si.filter(([id]) => Number(id) !== DOMANDA_CRITERI_TACITI).length;
   const criteriTaciti = risposte[String(DOMANDA_CRITERI_TACITI)]?.risposta === "si";
-  const impattiMancanti = si.filter(
-    ([id, r]) => Number(id) !== DOMANDA_CRITERI_TACITI && typeof r.impatto !== "number"
-  ).length;
 
   useEffect(() => {
     onSavedRef.current = onSaved;
@@ -109,6 +107,8 @@ export default function Step1Frizione({
       const next = { ...current, ...patch };
       // Passando a "no" impatto e nome vengono scartati, non conservati nascosti.
       if (next.risposta === "no") return { ...prev, [String(id)]: { risposta: "no" } };
+      // Sul si la barra parte gia impostata: non esiste un valore "non ancora scelto".
+      if (typeof next.impatto !== "number") next.impatto = IMPATTO_DEFAULT;
       return { ...prev, [String(id)]: next };
     });
   }
@@ -244,28 +244,17 @@ export default function Step1Frizione({
                   <p className="text-xs font-medium text-ifab-text">{IMPATTO_LABEL}</p>
                   <p className="mt-0.5 text-xs text-ifab-text-muted">{IMPATTO_SOTTOTESTO}</p>
 
-                  <div className="mt-3 flex items-center gap-3">
+                  <div className="mt-3">
                     <input
                       type="range"
-                      min={1}
+                      min={0}
                       max={10}
-                      step={1}
+                      step={0.1}
                       disabled={locked}
-                      value={answer?.impatto ?? 5}
+                      value={answer?.impatto ?? IMPATTO_DEFAULT}
                       onChange={(e) => setRisposta(domanda.id, { impatto: Number(e.target.value) })}
-                      className={`h-1.5 w-full cursor-pointer appearance-none rounded-full accent-ifab-blue ${
-                        typeof answer?.impatto === "number" ? "bg-ifab-blue/30" : "bg-ifab-border"
-                      }`}
+                      className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ifab-blue/30 accent-ifab-blue"
                     />
-                    <span
-                      className={`w-14 shrink-0 rounded-lg px-2 py-1 text-center text-sm font-semibold ${
-                        typeof answer?.impatto === "number"
-                          ? "bg-ifab-blue/10 text-ifab-blue"
-                          : "bg-ifab-bg-soft text-ifab-text-muted"
-                      }`}
-                    >
-                      {typeof answer?.impatto === "number" ? answer.impatto : "—"}
-                    </span>
                   </div>
 
                   <div className="mt-2 flex flex-col gap-0.5 text-[11px] text-ifab-text-muted sm:flex-row sm:justify-between">
@@ -276,9 +265,6 @@ export default function Step1Frizione({
                     ))}
                   </div>
 
-                  {typeof answer?.impatto !== "number" && (
-                    <p className="mt-2 text-xs text-amber-700">Muovi la barra per indicare l&apos;impatto.</p>
-                  )}
                 </div>
               )}
             </section>
@@ -301,7 +287,7 @@ export default function Step1Frizione({
         <button
           type="button"
           onClick={handleSave}
-          disabled={locked || saving || candidateCount === 0 || impattiMancanti > 0}
+          disabled={locked || saving || candidateCount === 0}
           className="flex items-center gap-2 rounded-lg bg-ifab-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-ifab-navy-deep disabled:opacity-50"
         >
           <Save size={16} /> {saving ? "Salvataggio..." : "Conferma la scheda"}
@@ -309,13 +295,6 @@ export default function Step1Frizione({
         {candidateCount === 0 && risposteDate > 0 && (
           <span className="text-xs text-amber-700">
             Serve almeno un sì per proseguire: rivedi le risposte.
-          </span>
-        )}
-        {impattiMancanti > 0 && (
-          <span className="text-xs text-amber-700">
-            {impattiMancanti === 1
-              ? "Manca l'impatto su una attività segnalata."
-              : `Mancano gli impatti su ${impattiMancanti} attività segnalate.`}
           </span>
         )}
         {savedAt && (

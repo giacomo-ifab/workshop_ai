@@ -6,6 +6,11 @@ import { Step1Submission, Step2Submission } from "@/lib/types";
 import { calcolaEsiti, etichettaCaratteristica } from "@/lib/frizioneScoring";
 import MatriceImpattoProntezza from "./MatriceImpattoProntezza";
 
+/** Un decimale solo quando serve: la barra ora è a scala decimale. */
+function arrotonda(v: number): string {
+  return v % 1 === 0 ? String(v) : v.toFixed(1);
+}
+
 /**
  * Step 3 — esito. Tutto è calcolato da step1 + step2 (nessun dato proprio):
  * matrice Impatto × Prontezza e una scheda per candidata, in ordine di
@@ -99,7 +104,7 @@ export default function Step3Esito({
                 <div className="text-right">
                   <p className="text-2xl font-bold text-ifab-navy">{Math.round(e.punteggio)}</p>
                   <p className="text-[11px] text-ifab-text-muted">
-                    impatto {e.impatto} × prontezza {e.prontezza % 1 === 0 ? e.prontezza : e.prontezza.toFixed(1)}
+                    impatto {arrotonda(e.impatto)} × prontezza {arrotonda(e.prontezza)}
                   </p>
                 </div>
               </div>

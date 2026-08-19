@@ -87,6 +87,10 @@ export function nomeSuggerito(id: number): string {
 export const IMPATTO_LABEL = "Quanto pesa negativamente sul processo?";
 export const IMPATTO_SOTTOTESTO =
   "Considera quanto spesso la svolgi, quanto tempo ti assorbe e cosa accade se è lenta o sbagliata.";
+
+/** Valore di partenza della barra di impatto: il centro della scala. */
+export const IMPATTO_DEFAULT = 5;
+
 export const IMPATTO_ANCORAGGI: { valore: number; testo: string }[] = [
   { valore: 1, testo: "fastidio trascurabile" },
   { valore: 5, testo: "rallenta, ma si gestisce" },
