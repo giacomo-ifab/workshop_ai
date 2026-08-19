@@ -92,7 +92,7 @@ export const IMPATTO_SOTTOTESTO =
 export const IMPATTO_DEFAULT = 5;
 
 export const IMPATTO_ANCORAGGI: { valore: number; testo: string }[] = [
-  { valore: 1, testo: "fastidio trascurabile" },
+  { valore: 0, testo: "fastidio trascurabile" },
   { valore: 5, testo: "rallenta, ma si gestisce" },
   { valore: 10, testo: "collo di bottiglia riconosciuto da tutti" },
 ];
