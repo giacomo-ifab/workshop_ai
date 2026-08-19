@@ -43,6 +43,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
   // Eliminazione in due passaggi: cancella dati di tutti i partecipanti.
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copiato, setCopiato] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -110,9 +111,15 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
     }
   }
 
-  function copyJoinLink() {
-    const url = `${window.location.origin}/join?code=${code}`;
-    navigator.clipboard.writeText(url);
+  /** Copia il solo codice: e' quello che il facilitatore detta o proietta. */
+  async function copyCodice() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiato(true);
+      setTimeout(() => setCopiato(false), 2000);
+    } catch {
+      // Clipboard negata dal browser: il codice resta comunque leggibile sul pulsante.
+    }
   }
 
   async function handleExportPdf() {
@@ -160,11 +167,12 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={copyJoinLink}
+              onClick={copyCodice}
               className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-              title="Copia link di partecipazione"
+              title="Copia il codice sessione"
             >
               <Copy size={15} /> Codice: <span className="font-mono tracking-widest">{code}</span>
+              {copiato && <span className="text-xs font-normal text-white/70">copiato</span>}
             </button>
             {confirmDelete ? (
               <span className="flex items-center gap-1">
