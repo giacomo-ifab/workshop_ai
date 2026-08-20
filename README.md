@@ -28,12 +28,15 @@ Il facilitatore sblocca ogni step dalla propria dashboard; i partecipanti vedono
 
 Lo Step 4 e la scheda Use Case sono **un unico step**: la scheda (che ricalca il template `Workshop1_Template_Use_Case_Submission_1_page.docx`) non si compila a mano campo per campo, si compila conversando. Il facilitatore sblocca lo step quando il gruppo è pronto.
 
-**Fase 1 — intervista.** L'agente parte dalla domanda generica dello Step 4 (com'è oggi il processo, chi è coinvolto, dove si inceppa, cosa costa) e da lì chiede solo quello che non ha ancora sentito. Le domande sono raggruppate per **argomento**: un argomento raccoglie tutti i campi che si possono ottenere con una domanda sola, così bastano ~11 domande per 28 campi. Una barra in alto mostra gli argomenti coperti.
+**Fase 1 — colloquio.** L'agente parte dalla domanda generica dello Step 4 (com'è oggi il processo, chi è coinvolto, dove si inceppa, cosa costa) e va avanti per **argomenti** — un argomento raccoglie i campi di cui si parla insieme (11 argomenti per 28 campi) — ma non a turni fissi: è un colloquio, non un questionario.
 
-- A ogni turno l'agente risponde in **JSON**: il messaggio per il partecipante, i campi che ha ricavato e gli argomenti che considera chiusi. I campi passano da `sanitizeInterviewFields` (id inesistenti, valori vuoti e opzioni non previste vengono scartati): nella scheda non può finire un valore che il form non sa mostrare.
-- **Gli argomenti ancora aperti li decide il server**, dai `closedGroups` accumulati nella submission, non il modello: l'avanzamento (e quindi il passaggio alla scheda) non dipende da quanto il modello ricorda della conversazione. Se il partecipante non sa rispondere, l'argomento si chiude comunque con "Da verificare" nei campi di testo.
-- Se una risposta contiene informazioni di argomenti successivi, l'agente compila anche quei campi e non li richiede.
-- Argomenti, domande suggerite, catalogo dei campi e prompt vivono in `src/config/block2Form.ts`: modificare lì testi, opzioni o raggruppamenti aggiorna form, intervista e conteggi, senza toccare componenti o API.
+- **Approfondisce invece di accontentarsi.** Ogni argomento porta con sé i suoi *criteri di adeguatezza* (`qualita` in `BLOCK2_INTERVIEW_GROUPS`: volumi e tempi, ruoli, il punto preciso in cui il processo si inceppa, come è stato ricavato un numero...). Finché mancano, l'agente resta sull'argomento e chiede di chiarire: risposte generiche ("è inefficiente"), quantità vaghe ("tante"), termini ambigui, contraddizioni con quanto detto prima, risposte che rispondono a un'altra domanda. Prima di cambiare argomento rispecchia in una riga quello che ha capito, così il partecipante può correggerlo.
+- Non insiste all'infinito: dopo circa tre scambi prende quello che c'è, segna le lacune come "Da verificare: ..." e va avanti. Se il partecipante dice che non sa, l'argomento si chiude subito.
+- **Come scrive i campi**: voci di dossier, non riassunti. Frasi complete, la terminologia del partecipante, tutti i numeri con unità e periodo, i sistemi col loro nome, ruoli, frequenze, eccezioni; i campi descrittivi stanno tipicamente su 4-8 righe, strutturate in punti quando hanno più parti. Le stime sono dichiarate come stime. Generalizzare ("processo manuale e inefficiente") è l'errore che il prompt vieta esplicitamente.
+- A ogni turno l'agente riceve **il contenuto attuale dei campi**, non solo quali sono compilati: quando riscrive un campo deve integrare quello che c'è, perché il valore che manda sostituisce il precedente. Risponde in **JSON** (messaggio + campi + argomenti chiusi) e i campi passano da `sanitizeInterviewFields` (id inesistenti, valori vuoti e opzioni non previste scartati): nella scheda non può finire un valore che il form non sa mostrare.
+- **Gli argomenti ancora aperti li decide il server**, dai `closedGroups` accumulati nella submission, non il modello: l'avanzamento (e quindi il passaggio alla scheda) non dipende da quanto il modello ricorda della conversazione. Il prompt riceve i criteri per esteso solo per l'argomento in corso e il successivo, gli altri come elenco: se un'informazione arriva in anticipo l'agente la usa e chiude quell'argomento, senza però condurlo prima del tempo.
+- Il colloquio gira su **`INTERVIEW_MODEL` (gpt-4o) a temperatura 0.3**, non sul modello piccolo degli assistenti degli Step 1-2 (`CHAT_MODEL`, gpt-4o-mini): giudicare l'ambiguità di una risposta e scrivere una scheda professionale sono proprio le cose su cui il modello piccolo generalizza. Si cambia in `src/lib/openaiClient.ts`.
+- Argomenti, criteri, domande di apertura, catalogo dei campi e prompt vivono in `src/config/block2Form.ts`: modificare lì testi, opzioni o raggruppamenti aggiorna form, colloquio e conteggi, senza toccare componenti o API.
 
 **Fase 2 — scheda da confermare.** Finita l'intervista (o in qualsiasi momento, con "Vai alla scheda") si apre la scheda con la stessa struttura del template — 1.0 Problema/opportunità di business · 1.1 Soluzione proposta · 1.2 Obiettivi strategici · 1.3 Dati e contesto · 1.4 Impatto atteso · 1.5 Metriche di successo · 1.6 Valutazione etica preliminare · 1.7 Rischi, complessità e resistenze — con le informazioni raccolte già organizzate nei campi.
 
@@ -51,17 +54,9 @@ Tutto passa dalle API del browser (Web Speech, `src/components/VoiceInput.tsx`):
 
 ## Pulsante "test"
 
-In alto in ogni pagina c'è un piccolo pulsante **test** che compila i campi di quella pagina con dati di esempio (`src/lib/testData.ts`), per provare il tool o verificare un deploy senza digitare tutto:
+In alto nella vista partecipante c'è un piccolo pulsante **test** che compila con dati di esempio (`src/lib/testData.ts`) lo step che si sta guardando: Step 1, Step 2, Step 1+2 insieme quando serve vedere l'esito nello Step 3, o la scheda Use Case già piena e aperta in fase di conferma. Serve alle prove e alle demo, per non digitare tutto a mano.
 
-| Pagina | Che cosa fa |
-| --- | --- |
-| home | apre `/join` con il nome di esempio già inserito |
-| ingresso partecipante | nome di esempio, più l'ultimo codice sessione visto su quel browser (il codice non si può inventare) |
-| login facilitatore | nome di esempio (la password resta da inserire) |
-| dashboard facilitatore | sblocca tutti gli step |
-| vista partecipante | compila lo step che si sta guardando: Step 1, Step 2, Step 1+2 per vedere l'esito nello Step 3, o la scheda Use Case già piena |
-
-I dati di esempio sono coerenti fra gli step: lo Step 2 lavora sulle candidate generate dallo Step 1 e la scheda Use Case racconta la stessa attività.
+I dati di esempio sono coerenti fra gli step: lo Step 2 lavora sulle candidate generate dallo Step 1 e la scheda Use Case racconta la stessa attività. Le pagine di ingresso (home, `/join`, login facilitatore) e la dashboard del facilitatore non hanno il pulsante.
 
 ## Riprendere una sessione interrotta
 

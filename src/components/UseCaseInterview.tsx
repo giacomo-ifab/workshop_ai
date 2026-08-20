@@ -18,12 +18,13 @@ export type InterviewTurn = {
 };
 
 /**
- * Step 4 — l'intervista che compila la scheda Use Case. Il partecipante
- * racconta (scrivendo o a voce), l'agente ricava i campi del modulo: si parte
- * dalla domanda generica su com'è il processo oggi, poi l'agente chiede solo
- * quello che non ha ancora sentito, un argomento per volta (gli argomenti
- * raggruppano i campi che si possono raccogliere con una domanda sola).
- * Quando non resta più nulla da chiedere si passa alla scheda da confermare.
+ * Step 4 — il colloquio che compila la scheda Use Case. Il partecipante racconta
+ * (scrivendo o a voce), l'agente ricava i campi del modulo: si parte dalla
+ * domanda generica su com'è il processo oggi e si va avanti per argomenti, ma
+ * non a turni fissi — se una risposta è vaga, ambigua o incompleta l'agente
+ * resta lì e chiede di approfondire, e chiude l'argomento solo quando ha
+ * abbastanza per scriverlo. Quando non resta niente da chiedere si passa alla
+ * scheda da confermare.
  */
 export default function UseCaseInterview({
   processoContext,
@@ -135,8 +136,9 @@ export default function UseCaseInterview({
       <section>
         <h2 className="mb-1 text-lg font-semibold text-ifab-navy">Step 4 · Il tuo caso d&apos;uso</h2>
         <p className="text-sm text-ifab-text-muted">
-          Non c&apos;è un modulo da compilare: raccontalo all&apos;assistente, a voce o scrivendo. Alla fine ti
-          mostra la scheda già compilata da confermare o correggere.
+          Non c&apos;è un modulo da compilare: raccontalo all&apos;assistente, a voce o scrivendo. Dove qualcosa
+          non è chiaro ti chiede di approfondire; alla fine ti mostra la scheda già compilata da confermare o
+          correggere.
         </p>
       </section>
 
@@ -145,15 +147,15 @@ export default function UseCaseInterview({
           <p className="text-xs font-medium text-ifab-text-muted">
             {corrente ? (
               <>
-                Argomento {coperti + 1} di {BLOCK2_INTERVIEW_GROUP_COUNT} ·{" "}
-                <span className="text-ifab-navy">{corrente.titolo}</span>
+                Stiamo parlando di <span className="text-ifab-navy">{corrente.titolo}</span> — l&apos;assistente
+                resta su questo punto finché non è chiaro
               </>
             ) : (
               <span className="text-emerald-600">Tutti gli argomenti coperti: la scheda è pronta.</span>
             )}
           </p>
-          <span className="text-xs text-ifab-text-muted">
-            {coperti}/{BLOCK2_INTERVIEW_GROUP_COUNT}
+          <span className="shrink-0 text-xs text-ifab-text-muted">
+            {coperti}/{BLOCK2_INTERVIEW_GROUP_COUNT} argomenti
           </span>
         </div>
         <div className="mt-2 flex gap-1">

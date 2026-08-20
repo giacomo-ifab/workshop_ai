@@ -19,7 +19,6 @@ import { calcolaEsiti } from "@/lib/frizioneScoring";
 import { nowMs } from "@/lib/time";
 import { downloadUseCasePdf } from "@/lib/useCasePdf";
 import { Participant, Submission, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
-import TestFillButton from "@/components/TestFillButton";
 
 const POLL_MS = 4000;
 
@@ -94,21 +93,6 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
     const next = !unlockedSteps[step];
     setUnlockedSteps((prev) => ({ ...prev, [step]: next }));
     await unlockStep(code, step, next);
-  }
-
-  /**
-   * Pulsante "test" della dashboard: qui non ci sono campi da compilare, ma per
-   * provare il tool serve una sessione con tutti gli step aperti (i dati di
-   * esempio li genera il pulsante "test" della pagina partecipante).
-   */
-  async function unlockAllSteps() {
-    const chiusi = STEP_ORDER.filter((s) => !unlockedSteps[s.key]);
-    setUnlockedSteps((prev) => {
-      const next = { ...prev };
-      for (const s of STEP_ORDER) next[s.key] = true;
-      return next;
-    });
-    for (const s of chiusi) await unlockStep(code, s.key, true);
   }
 
   /** Scheda Use Case di un partecipante, in PDF, dai soli dati salvati. */
@@ -200,11 +184,6 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
             <h1 className="text-lg font-semibold text-white">Workshop AI Adoption — Blocco 1</h1>
           </div>
           <div className="flex items-center gap-3">
-            <TestFillButton
-              onClick={() => void unlockAllSteps()}
-              tone="dark"
-              title="Sblocca tutti gli step per una prova (i dati di esempio si generano dalla pagina partecipante)"
-            />
             <button
               onClick={copyCodice}
               className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20"

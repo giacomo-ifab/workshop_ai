@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getOpenAI, CHAT_MODEL } from "@/lib/openaiClient";
+import { getOpenAI, CHAT_MODEL, INTERVIEW_MODEL } from "@/lib/openaiClient";
 import { buildStep1SystemPrompt, buildStep2SystemPrompt } from "@/config/block1Frizione";
 import {
   BLOCK2_FIELDS,
+  Block2CompiledField,
   buildUseCaseInterviewSystemPrompt,
   isBlock2ValueFilled,
   remainingInterviewGroups,
@@ -57,17 +58,26 @@ async function runUseCaseInterview(messages: ChatTurn[], context: AgentContext) 
   const closedBefore = sanitizeClosedGroups(context.closedGroups);
   const remaining = remainingInterviewGroups(closedBefore);
 
+  // I campi già compilati vanno passati col loro contenuto, non solo con l'id:
+  // ogni riscrittura deve integrare quello che c'è, non sostituirlo con una
+  // versione più povera.
+  const compiledFields: Block2CompiledField[] = BLOCK2_FIELDS.filter((f) =>
+    isBlock2ValueFilled(values[f.id])
+  ).map((f) => ({ id: f.id, label: f.label, value: values[f.id] }));
+
   const systemPrompt = buildUseCaseInterviewSystemPrompt({
     processoContext: context.processoContext ?? "",
     remainingGroups: remaining,
-    compiledFieldIds: BLOCK2_FIELDS.filter((f) => isBlock2ValueFilled(values[f.id])).map((f) => f.id),
+    compiledFields,
   });
 
   const openai = getOpenAI();
   const response = await openai.chat.completions.create({
-    model: CHAT_MODEL,
+    model: INTERVIEW_MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
-    temperature: 0.5,
+    // Bassa: qui servono precisione e aderenza a quello che ha detto il
+    // partecipante, non varietà di scrittura.
+    temperature: 0.3,
     response_format: { type: "json_object" },
   });
 

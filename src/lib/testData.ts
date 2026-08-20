@@ -1,6 +1,6 @@
-// Dati di test e di esempio usati dal pulsante "test" presente in alto in ogni
-// pagina. Servono a percorrere il tool senza compilare tutto a mano (prove,
-// demo, verifica del deploy): stanno qui, in un unico punto, e non in mezzo ai
+// Dati di test e di esempio usati dal pulsante "test" della vista partecipante.
+// Servono a percorrere gli step senza compilare tutto a mano (prove, demo,
+// verifica del deploy): stanno qui, in un unico punto, e non in mezzo ai
 // componenti, così restano coerenti fra gli step — lo Step 2 lavora sulle
 // candidate dello Step 1 e la scheda Use Case racconta la stessa attività.
 
@@ -9,9 +9,6 @@ import { Block2FieldValue, Step1Answer, Step1Submission, Step2Submission } from 
 import { candidateAttive } from "./frizioneScoring";
 import { CARATTERISTICHE, DOMANDE, DOMANDA_CRITERI_TACITI } from "@/config/block1Frizione";
 import { nowMs } from "./time";
-
-export const TEST_PARTICIPANT_NAME = "Mario Rossi (test)";
-export const TEST_FACILITATOR_NAME = "Facilitatore di test";
 
 /** Le attività segnalate con un sì: una per blocco, con impatto decrescente. */
 const TEST_SI: Record<number, { nome: string; impatto: number }> = {
