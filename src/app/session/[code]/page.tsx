@@ -1,9 +1,16 @@
 "use client";
 
-import { Fragment, startTransition, use, useCallback, useEffect, useState } from "react";
+import { Fragment, startTransition, use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Lock, RotateCcw, Users, X } from "lucide-react";
-import { ApiError, fetchState, resumeSession, saveProgress } from "@/lib/clientApi";
+import {
+  ApiError,
+  fetchState,
+  resumeSession,
+  saveProgress,
+  submitStep1,
+  submitStep2,
+} from "@/lib/clientApi";
 import {
   clearStoredIdentity,
   readStoredIdentity,
@@ -15,17 +22,18 @@ import {
   ParticipantTab,
   Step1Submission,
   Step2Submission,
-  Step4Submission,
   Submission,
   UnlockedSteps,
 } from "@/lib/types";
 import { DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
 import { nowMs } from "@/lib/time";
+import { candidateAttive } from "@/lib/frizioneScoring";
+import { testStep1Submission, testStep2Submission } from "@/lib/testData";
 import Step1Frizione from "@/components/Step1Frizione";
 import Step2Caratteristiche from "@/components/Step2Caratteristiche";
 import Step3Esito from "@/components/Step3Esito";
-import Step4Descrizione from "@/components/Step4Descrizione";
-import Block2Form from "@/components/Block2Form";
+import UseCaseStep, { UseCaseStepHandle } from "@/components/UseCaseStep";
+import TestFillButton from "@/components/TestFillButton";
 
 const POLL_MS = 4000;
 
@@ -33,16 +41,12 @@ const TAB_TO_STEP: Record<ParticipantTab, keyof UnlockedSteps> = {
   "1": "step1",
   "2": "step2",
   "3": "step3",
-  "4": "step4",
   UC: "useCase",
 };
 
 function hasWork(submission: Submission): boolean {
   return Boolean(
-    submission.step1?.updatedAt ||
-      submission.step2?.updatedAt ||
-      submission.step4?.updatedAt ||
-      submission.block2?.updatedAt
+    submission.step1?.updatedAt || submission.step2?.updatedAt || submission.block2?.updatedAt
   );
 }
 
@@ -55,6 +59,10 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
   const [tab, setTab] = useState<ParticipantTab>("1");
   const [resumedBanner, setResumedBanner] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // I componenti degli step tengono in stato locale i propri valori: dopo un
+  // riempimento di test vanno rimontati, altrimenti mostrano ancora i vecchi.
+  const [testStamp, setTestStamp] = useState(0);
+  const useCaseRef = useRef<UseCaseStepHandle>(null);
 
   /** L'identità salvata non vale più (sessione scaduta, nuova sessione, dati ripuliti). */
   const backToJoin = useCallback(() => {
@@ -86,7 +94,10 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           setIdentity(refreshed);
           setUnlockedSteps(meta.unlockedSteps);
           setSubmission(restored);
-          if (savedTab && meta.unlockedSteps[TAB_TO_STEP[savedTab]]) setTab(savedTab);
+          // Uno step salvato ma non più previsto (struttura cambiata) non
+          // riapre nulla: si riparte dal primo step sbloccato.
+          const savedStep = savedTab ? TAB_TO_STEP[savedTab] : undefined;
+          if (savedTab && savedStep && meta.unlockedSteps[savedStep]) setTab(savedTab);
           setResumedBanner(hasWork(restored));
         });
       })
@@ -157,7 +168,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     return <div className="flex min-h-screen items-center justify-center bg-ifab-bg text-sm text-ifab-text-muted">Caricamento...</div>;
   }
 
-  const { step1, step2, step4, block2 } = submission;
+  const { step1, step2, block2 } = submission;
 
   function updateSubmission(patch: Partial<Submission>) {
     setSubmission((prev) => ({ ...(prev as Submission), ...patch }));
@@ -177,6 +188,41 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     });
   }
 
+  /**
+   * Pulsante "test": compila con dati di esempio lo step che si sta guardando.
+   * Lo Step 2 e l'esito si appoggiano alle candidate dello Step 1, quindi se le
+   * risposte dello Step 1 mancano vengono generate anche quelle.
+   */
+  async function handleTestFill() {
+    const current = identity;
+    if (!current) return;
+
+    if (tab === "UC") {
+      useCaseRef.current?.fillWithTestData();
+      return;
+    }
+
+    const patch: Partial<Submission> = {};
+    const serveStep1 = tab === "1" || candidateAttive(step1, step2).length === 0;
+    let base = step1;
+
+    if (serveStep1) {
+      const dati = testStep1Submission();
+      await submitStep1(code, current.participantId, dati);
+      patch.step1 = dati;
+      base = dati;
+    }
+
+    if (tab !== "1" && base) {
+      const dati = testStep2Submission(base);
+      await submitStep2(code, current.participantId, dati);
+      patch.step2 = { ...step2, ...dati };
+    }
+
+    updateSubmission(patch);
+    setTestStamp((n) => n + 1);
+  }
+
   function handleExit() {
     clearStoredIdentity();
     router.replace("/join");
@@ -186,9 +232,15 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
     { key: "1", label: "1 · Scheda di attrito" },
     { key: "2", label: "2 · Caratteristiche" },
     { key: "3", label: "3 · Esito" },
-    { key: "4", label: "4 · Descrizione" },
-    { key: "UC", label: "Use Case" },
+    { key: "UC", label: "4 · Use Case" },
   ];
+
+  const testTitles: Record<ParticipantTab, string> = {
+    "1": "Compila lo Step 1 con risposte di esempio",
+    "2": "Compila lo Step 2 con valori di esempio",
+    "3": "Genera Step 1 e 2 di esempio per vedere l'esito",
+    UC: "Compila la scheda Use Case con dati di esempio",
+  };
 
   return (
     // Quando il pannello dell'assistente è aperto, da lg in su la pagina si
@@ -201,6 +253,11 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
             <h1 className="text-base font-semibold text-ifab-navy">Ciao, {identity.name}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <TestFillButton
+              onClick={() => void handleTestFill()}
+              title={testTitles[tab]}
+              disabled={!unlockedSteps[TAB_TO_STEP[tab]]}
+            />
             <div className="flex items-center gap-1.5 rounded-full bg-ifab-bg-soft px-3 py-1.5 text-xs text-ifab-text-muted">
               <Users size={14} /> Sessione {identity.code}
             </div>
@@ -236,7 +293,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           const unlocked = unlockedSteps[TAB_TO_STEP[t.key]];
           return (
             <Fragment key={t.key}>
-              {/* Separatore fra gli step del Blocco 1 e la scheda del Blocco 2 */}
+              {/* Separatore fra gli step del Blocco 1 e lo Step 4 del caso d'uso */}
               {t.key === "UC" && <span className="mx-1 hidden h-6 w-px bg-ifab-border sm:block" />}
               <button
                 onClick={() => unlocked && handleTabChange(t.key)}
@@ -256,6 +313,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-8">
         {tab === "1" && (
           <Step1Frizione
+            key={`step1-${testStamp}`}
             code={code}
             participantId={identity.participantId}
             data={step1}
@@ -267,6 +325,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
         )}
         {tab === "2" && (
           <Step2Caratteristiche
+            key={`step2-${testStamp}`}
             code={code}
             participantId={identity.participantId}
             step1={step1}
@@ -278,25 +337,15 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           />
         )}
         {tab === "3" && <Step3Esito participantName={identity.name} step1={step1} step2={step2} />}
-        {tab === "4" && (
-          <Step4Descrizione
-            code={code}
-            participantId={identity.participantId}
-            step1={step1}
-            step2={step2}
-            step4={step4}
-            locked={!unlockedSteps.step4}
-            onSaved={(data: Step4Submission) => updateSubmission({ step4: { ...step4, ...data } })}
-          />
-        )}
         {tab === "UC" &&
           (unlockedSteps.useCase ? (
-            <Block2Form
+            <UseCaseStep
+              ref={useCaseRef}
               code={code}
               participantId={identity.participantId}
+              participantName={identity.name}
               step1={step1}
               step2={step2}
-              step4={step4}
               block2={block2}
               onSaved={(data: Block2Submission) =>
                 updateSubmission({ block2: { ...block2, ...data, values: { ...block2?.values, ...data.values } } })
@@ -305,7 +354,7 @@ export default function SessionPage({ params }: { params: Promise<{ code: string
           ) : (
             <div className="rounded-xl border border-dashed border-ifab-border bg-white p-8 text-center text-sm text-ifab-text-muted">
               <Lock className="mx-auto mb-2" size={20} />
-              In attesa che il facilitatore sblocchi la scheda Use Case.
+              In attesa che il facilitatore sblocchi lo Step 4 — Use Case.
             </div>
           ))}
       </main>

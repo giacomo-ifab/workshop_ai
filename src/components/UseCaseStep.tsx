@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, HelpCircle, Save } from "lucide-react";
+import { Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { ArrowLeft, CheckCircle2, FileDown, HelpCircle, Save } from "lucide-react";
 import {
   BLOCK2_SECTIONS,
   Block2Field,
   Block2Section,
-  INITIAL_MESSAGE_BLOCK2,
+  isBlock2ValueFilled,
 } from "@/config/block2Form";
 import { calcolaEsiti, candidateAttive } from "@/lib/frizioneScoring";
 import {
@@ -15,19 +15,19 @@ import {
   ChatMessage,
   Step1Submission,
   Step2Submission,
-  Step4Submission,
 } from "@/lib/types";
 import { submitBlock2 } from "@/lib/clientApi";
 import { nowMs } from "@/lib/time";
-import AgentChat, { AgentChatHandle } from "./AgentChat";
-import AssistantPanel from "./AssistantPanel";
+import { TEST_CLOSED_GROUPS, TEST_USE_CASE_VALUES } from "@/lib/testData";
+import { downloadUseCasePdf } from "@/lib/useCasePdf";
+import UseCaseInterview, { InterviewTurn } from "./UseCaseInterview";
 
 const TOTAL_FIELDS = BLOCK2_SECTIONS.reduce((n, s) => n + s.fields.length, 0);
 
-function isFilled(value: Block2FieldValue | undefined): boolean {
-  if (Array.isArray(value)) return value.length > 0;
-  return Boolean(value && value.trim());
-}
+/** Il pulsante "test" della pagina compila la scheda e la apre già piena. */
+export type UseCaseStepHandle = {
+  fillWithTestData: () => void;
+};
 
 function asText(value: Block2FieldValue | undefined): string {
   return typeof value === "string" ? value : "";
@@ -37,49 +37,62 @@ function asList(value: Block2FieldValue | undefined): string[] {
   return Array.isArray(value) ? value : [];
 }
 
-export default function Block2Form({
+/**
+ * Step 4 — un unico step per il caso d'uso, in due fasi:
+ *   1. intervista: l'agente parte dalla domanda generica sul processo e ricava
+ *      i campi della scheda da quello che il partecipante racconta;
+ *   2. scheda: gli stessi campi del template, precompilati, da confermare o
+ *      correggere a mano, con l'export PDF in fondo.
+ * La fase raggiunta vive lato server (`interviewDone`), così il rientro riapre
+ * la scheda e non ricomincia la conversazione.
+ */
+export default function UseCaseStep({
   code,
   participantId,
+  participantName,
   step1,
   step2,
-  step4,
   block2,
   onSaved,
+  ref,
 }: {
   code: string;
   participantId: string;
+  participantName: string;
   step1?: Step1Submission;
   step2?: Step2Submission;
-  step4?: Step4Submission;
   block2?: Block2Submission;
   onSaved: (data: Block2Submission) => void;
+  ref?: Ref<UseCaseStepHandle>;
 }) {
   const [values, setValues] = useState<Record<string, Block2FieldValue>>(block2?.values ?? {});
   const [chatLog, setChatLog] = useState<ChatMessage[]>(block2?.chatLog ?? []);
+  const [closedGroups, setClosedGroups] = useState<string[]>(block2?.closedGroups ?? []);
+  const [phase, setPhase] = useState<"intervista" | "scheda">(
+    block2?.interviewDone || block2?.completedAt ? "scheda" : "intervista"
+  );
+  const [askedQuestion, setAskedQuestion] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(block2?.completedAt ?? null);
+  const [exporting, setExporting] = useState(false);
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved">(
     block2?.updatedAt || block2?.completedAt ? "saved" : "idle"
   );
-  const [sectionLabel, setSectionLabel] = useState<string | undefined>(undefined);
 
-  // Stessa meccanica dello Step A: la bozza si salva da sola, così chiudere il
-  // browser a metà scheda non fa perdere nulla e il rientro riparte da qui.
+  // Stessa meccanica degli altri step: la bozza si salva da sola, così chiudere
+  // il browser a metà scheda non fa perdere nulla e il rientro riparte da qui.
   const dirtyRef = useRef(false);
   const pendingRef = useRef<Record<string, Block2FieldValue> | null>(null);
   const onSavedRef = useRef(onSaved);
-  const chatRef = useRef<AgentChatHandle>(null);
 
-  // Contesto per l'agente: la descrizione scritta nello Step 4, altrimenti la
-  // candidata migliore o, se l'esito non è ancora calcolabile, le candidate.
+  // Contesto per l'agente: la candidata migliore del Blocco 1 (o, se l'esito
+  // non è ancora calcolabile, le candidate in gioco).
   const esiti = calcolaEsiti(step1, step2);
-  const processoContext = [
-    esiti[0]?.nome ?? candidateAttive(step1, step2).map((c) => c.nome).join(", "),
-    step4?.descrizione?.trim(),
-  ]
-    .filter(Boolean)
-    .join(" — ");
-  const compiled = BLOCK2_SECTIONS.flatMap((s) => s.fields).filter((f) => isFilled(values[f.id])).length;
+  const processoContext =
+    esiti[0]?.nome ?? candidateAttive(step1, step2).map((c) => c.nome).join(", ");
+  const compiled = BLOCK2_SECTIONS.flatMap((s) => s.fields).filter((f) =>
+    isBlock2ValueFilled(values[f.id])
+  ).length;
 
   useEffect(() => {
     onSavedRef.current = onSaved;
@@ -115,6 +128,23 @@ export default function Block2Form({
     };
   }, [code, participantId]);
 
+  useImperativeHandle(ref, () => ({
+    fillWithTestData: () => {
+      dirtyRef.current = true;
+      setDraftState("idle");
+      setValues((prev) => ({ ...prev, ...TEST_USE_CASE_VALUES }));
+      setClosedGroups(TEST_CLOSED_GROUPS);
+      setAskedQuestion(undefined);
+      setPhase("scheda");
+      void submitBlock2(code, participantId, {
+        values: TEST_USE_CASE_VALUES,
+        closedGroups: TEST_CLOSED_GROUPS,
+        interviewDone: true,
+        updatedAt: nowMs(),
+      });
+    },
+  }));
+
   function setValue(id: string, value: Block2FieldValue) {
     dirtyRef.current = true;
     setDraftState("idle");
@@ -126,11 +156,56 @@ export default function Block2Form({
     setValue(id, current.includes(option) ? current.filter((v) => v !== option) : [...current, option]);
   }
 
+  /** Un turno di intervista: i campi ricavati entrano nella scheda e si salvano. */
+  async function handleTurn(turn: InterviewTurn) {
+    const merged = { ...values, ...turn.fields };
+    setValues(merged);
+    setChatLog(turn.chatLog);
+    setClosedGroups(turn.closedGroups);
+    setDraftState("saving");
+    const data: Block2Submission = {
+      values: merged,
+      chatLog: turn.chatLog,
+      closedGroups: turn.closedGroups,
+      updatedAt: nowMs(),
+    };
+    try {
+      await submitBlock2(code, participantId, data);
+      onSaved(data);
+      setDraftState("saved");
+    } catch {
+      setDraftState("idle");
+    }
+  }
+
+  /** Fine dell'intervista (o passaggio manuale): si apre la scheda da confermare. */
+  async function openScheda() {
+    setAskedQuestion(undefined);
+    setPhase("scheda");
+    const data: Block2Submission = { interviewDone: true, updatedAt: nowMs() };
+    try {
+      await submitBlock2(code, participantId, data);
+      onSaved(data);
+    } catch {
+      // La fase è un comfort per il rientro: se non si salva si prosegue.
+    }
+  }
+
+  function backToInterview(question?: string) {
+    setAskedQuestion(question);
+    setPhase("intervista");
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
       dirtyRef.current = false;
-      const data: Block2Submission = { values, updatedAt: nowMs(), completedAt: nowMs() };
+      const data: Block2Submission = {
+        values,
+        interviewDone: true,
+        updatedAt: nowMs(),
+        completedAt: nowMs(),
+      };
       await submitBlock2(code, participantId, data);
       onSaved(data);
       setSavedAt(nowMs());
@@ -140,17 +215,18 @@ export default function Block2Form({
     }
   }
 
-  async function handleChatUpdate(newLog: ChatMessage[]) {
-    setChatLog(newLog);
-    const data: Block2Submission = { chatLog: newLog, updatedAt: nowMs() };
-    await submitBlock2(code, participantId, data);
-    onSaved(data);
+  async function handleExportPdf() {
+    setExporting(true);
+    try {
+      await downloadUseCasePdf({ participantName, code, values, now: nowMs() });
+    } finally {
+      setExporting(false);
+    }
   }
 
   function askAboutSection(section: Block2Section) {
-    setSectionLabel(`${section.number} ${section.title}`);
-    chatRef.current?.ask(
-      `Aiutami con la sezione "${section.number} ${section.title}": cosa devo scrivere e con che livello di dettaglio?`
+    backToInterview(
+      `Riprendiamo la sezione "${section.number} ${section.title}": aiutami a completarla meglio.`
     );
   }
 
@@ -222,17 +298,45 @@ export default function Block2Form({
     );
   }
 
+  if (phase === "intervista") {
+    return (
+      <UseCaseInterview
+        processoContext={processoContext}
+        values={values}
+        closedGroups={closedGroups}
+        chatLog={chatLog}
+        initialInput={askedQuestion}
+        onTurn={handleTurn}
+        onDone={openScheda}
+        onOpenScheda={openScheda}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-ifab-navy">Blocco 2 · Use Case Submission</h2>
+        <h2 className="mb-1 text-lg font-semibold text-ifab-navy">Step 4 · Scheda Use Case</h2>
         <p className="text-sm text-ifab-text-muted">
-          Descrivi il caso d&apos;uso che vuoi portare avanti. Usa l&apos;assistente nel pannello a destra (o il
-          pulsante &quot;Chiedi aiuto&quot; di ogni sezione) se un campo non ti è chiaro.
+          Queste sono le informazioni che ho raccolto dalla conversazione, organizzate nei campi della scheda.
+          Controllale: puoi correggere qualsiasi campo qui, oppure tornare a parlarne con l&apos;assistente.
         </p>
         <p className="mt-2 text-xs text-ifab-text-muted">
           Campi compilati: {compiled}/{TOTAL_FIELDS}
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ifab-blue/30 bg-ifab-blue/5 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => backToInterview()}
+          className="flex items-center gap-2 rounded-lg border border-ifab-blue px-3 py-1.5 text-xs font-semibold text-ifab-blue-dark transition hover:bg-ifab-blue hover:text-white"
+        >
+          <ArrowLeft size={14} /> Torna alla conversazione
+        </button>
+        <span className="text-xs text-ifab-text-muted">
+          Serve per aggiungere o cambiare qualcosa raccontandolo, invece di scriverlo campo per campo.
+        </span>
       </div>
 
       {BLOCK2_SECTIONS.map((section) => (
@@ -246,7 +350,7 @@ export default function Block2Form({
               onClick={() => askAboutSection(section)}
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-ifab-border px-2.5 py-1.5 text-xs font-medium text-ifab-navy transition hover:border-ifab-blue hover:text-ifab-blue"
             >
-              <HelpCircle size={13} /> Chiedi aiuto
+              <HelpCircle size={13} /> Chiedi all&apos;assistente
             </button>
           </div>
 
@@ -262,30 +366,26 @@ export default function Block2Form({
         </section>
       ))}
 
-      <AssistantPanel title="Assistente AI" subtitle="Supporto alla compilazione della scheda">
-        <AgentChat
-          ref={chatRef}
-          variant="panel"
-          subsection="block2"
-          context={{ processoContext, sectionLabel }}
-          initialMessage={INITIAL_MESSAGE_BLOCK2}
-          initialChatLog={chatLog}
-          onUpdate={handleChatUpdate}
-        />
-      </AssistantPanel>
-
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={handleSave}
           disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-ifab-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-ifab-navy-deep disabled:opacity-50"
         >
-          <Save size={16} /> {saving ? "Salvataggio..." : "Salva scheda"}
+          <Save size={16} /> {saving ? "Salvataggio..." : "Confermo la scheda"}
+        </button>
+        <button
+          type="button"
+          onClick={handleExportPdf}
+          disabled={exporting}
+          className="flex items-center gap-2 rounded-lg border border-ifab-navy px-4 py-2 text-sm font-semibold text-ifab-navy transition hover:bg-ifab-navy hover:text-white disabled:opacity-50"
+        >
+          <FileDown size={16} /> {exporting ? "Preparo il PDF..." : "Scarica PDF"}
         </button>
         {savedAt && (
           <span className="flex items-center gap-1 text-xs text-emerald-600">
-            <CheckCircle2 size={14} /> Scheda salvata
+            <CheckCircle2 size={14} /> Scheda confermata
           </span>
         )}
         {!savedAt && draftState !== "idle" && (

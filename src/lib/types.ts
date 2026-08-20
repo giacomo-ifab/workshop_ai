@@ -3,7 +3,7 @@
 //   1. 21 domande sì/no; su ogni sì, impatto 1-10 (e nome dell'attività)
 //   2. per le 3 candidate a impatto più alto, una caratteristica 1-10
 //   3. esito calcolato: prontezza, punteggio, tecnologia, supervisione, matrice
-// Blocco 2 — Use Case Submission (form su una pagina).
+// Step 4 — Use Case: intervista con l'agente e scheda da confermare (Blocco 2).
 
 /** Blocco di appartenenza di una domanda: decide caratteristica e tecnologia. */
 export type FrizioneBlocco = "sposti" | "controlli" | "scrivi" | "decidi";
@@ -12,8 +12,8 @@ export type UnlockedSteps = {
   step1: boolean;
   step2: boolean;
   step3: boolean;
-  step4: boolean;
-  // Blocco 2 — Use Case Submission (un unico form, sbloccato in blocco).
+  // Step 4 — descrizione del processo e scheda Use Case: un unico step, che
+  // parte dall'intervista dell'agente e finisce sulla scheda da confermare.
   useCase: boolean;
 };
 
@@ -21,7 +21,6 @@ export const DEFAULT_UNLOCKED_STEPS: UnlockedSteps = {
   step1: false,
   step2: false,
   step3: false,
-  step4: false,
   useCase: false,
 };
 
@@ -79,38 +78,35 @@ export type Step2Submission = {
 };
 
 /**
- * Blocco 2 — Use Case Submission. I campi non sono elencati uno per uno: la
+ * Step 4 — Use Case Submission. I campi non sono elencati uno per uno: la
  * struttura del form (sezioni, campi, opzioni) vive in `config/block2Form.ts`
  * e qui si conservano i valori indicizzati per id di campo, così aggiornare il
  * template non richiede modifiche al modello dati né alle API.
+ *
+ * I valori arrivano dall'intervista dell'agente (`chatLog`) e restano
+ * modificabili a mano nella scheda di conferma. `closedGroups` sono gli
+ * argomenti dell'intervista già affrontati: sono loro, non il conteggio dei
+ * campi, a dire quanto manca (un argomento si chiude anche se il partecipante
+ * non sa rispondere). `interviewDone` distingue "sto ancora parlando" da "sono
+ * sulla scheda", così il rientro riapre la fase giusta.
  */
 export type Block2FieldValue = string | string[];
 
 export type Block2Submission = {
   values?: Record<string, Block2FieldValue>;
   chatLog?: ChatMessage[];
+  closedGroups?: string[];
+  interviewDone?: boolean;
   updatedAt?: number;
   completedAt?: number;
 };
 
-/**
- * Step 4 — descrizione a testo libero dell'attività risultata prima per
- * punteggio. `attivitaId` registra a quale candidata si riferisce il testo,
- * così resta leggibile anche se in seguito la classifica cambia.
- */
-export type Step4Submission = {
-  attivitaId?: number;
-  descrizione?: string;
-  updatedAt?: number;
-  completedAt?: number;
-};
-
-export type ParticipantTab = "1" | "2" | "3" | "4" | "UC";
+export type ParticipantTab = "1" | "2" | "3" | "UC";
 
 /**
  * Punto in cui il partecipante stava lavorando: salvato lato server insieme
  * alla submission così che il rientro (anche da un altro dispositivo) riapra
- * esattamente lo step dove ci si era interrotti. "UC" è il form del Blocco 2.
+ * esattamente lo step dove ci si era interrotti. "UC" è lo Step 4 (Use Case).
  */
 export type ParticipantProgress = {
   tab: ParticipantTab;
@@ -123,7 +119,6 @@ export type Submission = {
   step2?: Step2Submission;
   // Lo Step 3 non ha dati propri: l'esito è calcolato da step1 + step2
   // (vedi lib/frizioneScoring.ts), così non può divergere da ciò che si vede.
-  step4?: Step4Submission;
   block2?: Block2Submission;
   progress?: ParticipantProgress;
 };

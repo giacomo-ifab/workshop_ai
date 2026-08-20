@@ -16,7 +16,10 @@ import { clearFacilitatorCode, saveFacilitatorCode } from "@/lib/participantStor
 import { DOMANDE, DOMANDA_CRITERI_TACITI } from "@/config/block1Frizione";
 import { BLOCK2_FIELDS } from "@/config/block2Form";
 import { calcolaEsiti } from "@/lib/frizioneScoring";
+import { nowMs } from "@/lib/time";
+import { downloadUseCasePdf } from "@/lib/useCasePdf";
 import { Participant, Submission, UnlockedSteps, DEFAULT_UNLOCKED_STEPS } from "@/lib/types";
+import TestFillButton from "@/components/TestFillButton";
 
 const POLL_MS = 4000;
 
@@ -26,8 +29,7 @@ const STEP_ORDER: { key: keyof UnlockedSteps; label: string; block: 1 | 2 }[] = 
   { key: "step1", label: "1 · Scheda di attrito", block: 1 },
   { key: "step2", label: "2 · Caratteristiche", block: 1 },
   { key: "step3", label: "3 · Esito", block: 1 },
-  { key: "step4", label: "4 · Descrizione", block: 1 },
-  { key: "useCase", label: "Use Case Submission", block: 2 },
+  { key: "useCase", label: "4 · Use Case (intervista + scheda)", block: 2 },
 ];
 
 export default function FacilitatorDashboard({ params }: { params: Promise<{ code: string }> }) {
@@ -44,6 +46,8 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [copiato, setCopiato] = useState(false);
+  // Partecipante di cui si sta generando il PDF della scheda Use Case.
+  const [pdfFor, setPdfFor] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -90,6 +94,36 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
     const next = !unlockedSteps[step];
     setUnlockedSteps((prev) => ({ ...prev, [step]: next }));
     await unlockStep(code, step, next);
+  }
+
+  /**
+   * Pulsante "test" della dashboard: qui non ci sono campi da compilare, ma per
+   * provare il tool serve una sessione con tutti gli step aperti (i dati di
+   * esempio li genera il pulsante "test" della pagina partecipante).
+   */
+  async function unlockAllSteps() {
+    const chiusi = STEP_ORDER.filter((s) => !unlockedSteps[s.key]);
+    setUnlockedSteps((prev) => {
+      const next = { ...prev };
+      for (const s of STEP_ORDER) next[s.key] = true;
+      return next;
+    });
+    for (const s of chiusi) await unlockStep(code, s.key, true);
+  }
+
+  /** Scheda Use Case di un partecipante, in PDF, dai soli dati salvati. */
+  async function handleUseCasePdf(participant: Participant, submission: Submission) {
+    setPdfFor(participant.participantId);
+    try {
+      await downloadUseCasePdf({
+        participantName: participant.name,
+        code,
+        values: submission.block2?.values ?? {},
+        now: nowMs(),
+      });
+    } finally {
+      setPdfFor(null);
+    }
   }
 
   async function handleLogout() {
@@ -166,6 +200,11 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
             <h1 className="text-lg font-semibold text-white">Workshop AI Adoption — Blocco 1</h1>
           </div>
           <div className="flex items-center gap-3">
+            <TestFillButton
+              onClick={() => void unlockAllSteps()}
+              tone="dark"
+              title="Sblocca tutti gli step per una prova (i dati di esempio si generano dalla pagina partecipante)"
+            />
             <button
               onClick={copyCodice}
               className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20"
@@ -285,7 +324,7 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                 onClick={handleExportPdf}
                 className="flex items-center gap-2 rounded-lg border border-ifab-navy px-3 py-1.5 text-xs font-semibold text-ifab-navy transition hover:bg-ifab-navy hover:text-white"
               >
-                <FileDown size={14} /> Esporta PDF
+                <FileDown size={14} /> Esporta dashboard
               </button>
             </div>
             <div className="overflow-x-auto">
@@ -296,8 +335,8 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                     <th className="py-2 pr-4">Step 1</th>
                     <th className="py-2 pr-4">Step 2</th>
                     <th className="py-2 pr-4">Candidata migliore</th>
-                    <th className="py-2 pr-4">Descrizione</th>
                     <th className="py-2 pr-4">Use Case</th>
+                    <th className="py-2 pr-4">Scheda</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -349,14 +388,22 @@ export default function FacilitatorDashboard({ params }: { params: Promise<{ cod
                         <td className="py-2 pr-4 text-ifab-text-muted">
                           {migliore ? `${migliore.nome} (${Math.round(migliore.punteggio)})` : "—"}
                         </td>
-                        <td className="py-2 pr-4">
-                          {submission.step4?.completedAt
-                            ? "✅"
-                            : submission.step4?.descrizione?.trim()
-                              ? "in bozza"
-                              : "—"}
-                        </td>
                         <td className="py-2 pr-4">{useCaseLabel}</td>
+                        <td className="py-2 pr-4">
+                          {useCaseFilled > 0 ? (
+                            <button
+                              onClick={() => void handleUseCasePdf(participant, submission)}
+                              disabled={pdfFor === participant.participantId}
+                              title={`Scarica la scheda Use Case di ${participant.name} in PDF`}
+                              className="flex items-center gap-1.5 rounded-lg border border-ifab-border px-2 py-1 text-[11px] font-semibold text-ifab-navy transition hover:border-ifab-navy hover:bg-ifab-navy hover:text-white disabled:opacity-50"
+                            >
+                              <FileDown size={12} />
+                              {pdfFor === participant.participantId ? "Attendere..." : "PDF"}
+                            </button>
+                          ) : (
+                            <span className="text-ifab-text-muted">—</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

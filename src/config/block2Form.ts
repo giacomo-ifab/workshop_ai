@@ -1,8 +1,10 @@
 // Configurazione del Blocco 2 — "Use Case Submission"
 // Struttura ricalcata sul template "Workshop1_Template_Use_Case_Submission_1_page.docx":
 // stesse sezioni, stessi campi e stesse opzioni delle caselle da spuntare.
-// Come per il Blocco 1, il contenuto sta tutto qui: il componente del form e
-// il prompt dell'agente si generano da questa configurazione.
+// Come per il Blocco 1, il contenuto sta tutto qui: form, prompt dell'agente e
+// argomenti dell'intervista si generano da questa configurazione.
+
+import { Block2FieldValue } from "@/lib/types";
 
 export const BLOCK2_COMPLETION_HINT =
   "Non esiste una risposta perfetta: annota quello che sai oggi e segnala esplicitamente ciò che va ancora verificato.";
@@ -336,17 +338,197 @@ export function block2FieldById(id: string): Block2Field | undefined {
   return BLOCK2_FIELDS.find((f) => f.id === id);
 }
 
-export const INITIAL_MESSAGE_BLOCK2 =
-  "Ciao! Sono qui per aiutarti a compilare la scheda del use case. Chiedimi pure che cosa intende una sezione, che livello di dettaglio serve o come stimare un valore che non conosci con precisione — puoi anche incollarmi una bozza di risposta e te la rendo più concreta.";
+/** Un campo è compilato se ha testo o almeno una opzione scelta. */
+export function isBlock2ValueFilled(value: Block2FieldValue | undefined): value is Block2FieldValue {
+  if (Array.isArray(value)) return value.length > 0;
+  return Boolean(value && value.trim());
+}
 
-/** Descrizione testuale del form, passata all'agente perché sappia di cosa si parla. */
-function formOutline(): string {
+/** Etichetta leggibile di un valore: le opzioni si mostrano col loro testo, non col codice. */
+export function block2ValueLabel(field: Block2Field, value: Block2FieldValue | undefined): string {
+  if (!isBlock2ValueFilled(value)) return "";
+  const labelOf = (v: string) => field.options?.find((o) => o.value === v)?.label ?? v;
+  if (Array.isArray(value)) return value.map(labelOf).join(", ");
+  return field.options ? labelOf(value) : value;
+}
+
+// --- Intervista: la scheda si compila conversando --------------------------
+
+/**
+ * Argomenti dell'intervista, nell'ordine in cui l'agente li affronta. Un
+ * argomento raggruppa i campi che si possono raccogliere con una sola domanda:
+ * servono ~11 domande invece dei 27 campi del form, così la conversazione resta
+ * breve. Il primo argomento è la vecchia domanda dello Step 4 (com'è il
+ * processo oggi e qual è il problema): tutto il resto si aggancia a quella.
+ */
+export type Block2InterviewGroup = {
+  key: string;
+  /** Titolo breve, usato per mostrare l'avanzamento al partecipante. */
+  titolo: string;
+  /** Domanda suggerita all'agente: una sola, anche quando copre più campi. */
+  domanda: string;
+  /** Campi della scheda che questo argomento deve riempire. */
+  fields: string[];
+};
+
+export const BLOCK2_INTERVIEW_GROUPS: Block2InterviewGroup[] = [
+  {
+    key: "processo",
+    titolo: "Processo e problema",
+    domanda:
+      "Raccontami com'è oggi questo processo e qual è il problema che hai individuato: come si svolge, chi è coinvolto, dove si inceppa, quanto costa in tempo o persone e che conseguenze ha quando va storto.",
+    fields: ["problema"],
+  },
+  {
+    key: "soluzione",
+    titolo: "Soluzione immaginata",
+    domanda:
+      "Come immagini la soluzione? Che cosa dovrebbe produrre il sistema, in che momento del processo entrerebbe e cosa cambierebbe rispetto a oggi.",
+    fields: ["soluzione"],
+  },
+  {
+    key: "obiettivi",
+    titolo: "Obiettivi",
+    domanda:
+      "Quali obiettivi conta di più raggiungere: ridurre i tempi, ridurre gli errori, migliorare la qualità del servizio, liberare tempo delle persone, analisi più avanzate, personalizzazione, taglio dei costi operativi? Puoi indicarne più di uno.",
+    fields: ["obiettivi", "obiettiviAltro"],
+  },
+  {
+    key: "dati",
+    titolo: "Dati e fonti",
+    domanda:
+      "Parliamo dei dati: quali servono al sistema, dove risiedono oggi (sistemi, file, fonti esterne, dati ancora da creare) e con quali volumi indicativi al giorno o all'anno.",
+    fields: ["datiNecessari", "datiDove", "datiVolume"],
+  },
+  {
+    key: "qualitaDati",
+    titolo: "Qualità dei dati",
+    domanda:
+      "Come giudichi la qualità di quei dati (alta, media, bassa oppure non lo sai) e sono già etichettati o classificati in modo utilizzabile per addestrare un modello (sì, in parte, no, non pertinente)?",
+    fields: ["datiQualita", "datiEtichettati"],
+  },
+  {
+    key: "beneficio",
+    titolo: "Beneficio atteso",
+    domanda:
+      "Qual è il beneficio principale che ti aspetti (tempo, costi, qualità, ricavi o rischi), quanto vale anche solo a spanne (ore, euro all'anno, punti di miglioramento) e quante persone ne sarebbero impattate?",
+    fields: ["beneficioPrimario", "stimaBeneficio", "utentiImpattati"],
+  },
+  {
+    key: "usoImpatto",
+    titolo: "Misurabilità e uso",
+    domanda:
+      "Quel beneficio è già misurabile in modo diretto o va validato sperimentalmente, quanta confidenza dai alla tua stima (alta, media, bassa) e con che frequenza verrebbe usato il sistema (più volte al giorno, ogni giorno, ogni settimana, ogni mese, ad-hoc)?",
+    fields: ["impattoTipo", "confidenzaStima", "frequenzaUso"],
+  },
+  {
+    key: "metriche",
+    titolo: "Metriche",
+    domanda:
+      "Come si misura oggi la performance di questo processo, in numeri, e quale singola metrica useresti per dire che il progetto è andato bene (con il valore obiettivo e ciò che non deve peggiorare)?",
+    fields: ["baseline", "metricaPrimaria"],
+  },
+  {
+    key: "etica",
+    titolo: "Valutazione etica",
+    domanda:
+      "Passiamo alla parte etica: il sistema influenzerebbe decisioni su persone specifiche? Se sì, quali categorie sono coinvolte (dipendenti, clienti, candidati, altro), ne sarebbero informate e resterebbe una revisione umana prima della decisione?",
+    fields: ["eticaDecisioni", "eticaCategorie", "eticaInformate", "eticaRevisione"],
+  },
+  {
+    key: "rischi",
+    titolo: "Rischi e complessità",
+    domanda:
+      "Quanto lo consideri complesso tecnicamente (bassa, media, alta o non so), sono coinvolti dati sensibili, ci sono normative da rispettare (GDPR, AI Act, regole di settore) e dipende da altri sistemi o progetti in corso?",
+    fields: ["complessita", "datiSensibili", "compliance", "dipendenze"],
+  },
+  {
+    key: "persone",
+    titolo: "Persone e resistenze",
+    domanda:
+      "Ultimo argomento: chi potrebbe opporsi a questa soluzione e perché, chi invece la adotterebbe volentieri come utente pilota e che cosa faresti per ridurre le resistenze prima di partire?",
+    fields: ["resistenze", "sostenitori", "azioniResistenza"],
+  },
+];
+
+export const BLOCK2_INTERVIEW_GROUP_COUNT = BLOCK2_INTERVIEW_GROUPS.length;
+
+/** Argomenti non ancora chiusi dall'agente, nell'ordine previsto. */
+export function remainingInterviewGroups(closedGroups?: string[]): Block2InterviewGroup[] {
+  const closed = new Set(closedGroups ?? []);
+  return BLOCK2_INTERVIEW_GROUPS.filter((g) => !closed.has(g.key));
+}
+
+/** Tiene solo chiavi di argomento esistenti (l'agente potrebbe inventarne). */
+export function sanitizeClosedGroups(raw: unknown, previous?: string[]): string[] {
+  const known = new Set(BLOCK2_INTERVIEW_GROUPS.map((g) => g.key));
+  const fromModel = Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string") : [];
+  const merged = [...(previous ?? []), ...fromModel].filter((k) => known.has(k));
+  // Ordine dell'intervista, senza duplicati: è quello con cui si mostra l'avanzamento.
+  return BLOCK2_INTERVIEW_GROUPS.map((g) => g.key).filter((k) => merged.includes(k));
+}
+
+/**
+ * Ripulisce i campi estratti dall'agente: scarta id inesistenti, valori vuoti e
+ * opzioni non previste, e normalizza le scelte multiple ad array. Serve perché
+ * l'estrazione arriva da un modello: la scheda non deve poter contenere valori
+ * che il form non sa mostrare.
+ */
+export function sanitizeInterviewFields(raw: unknown): Record<string, Block2FieldValue> {
+  const out: Record<string, Block2FieldValue> = {};
+  if (!raw || typeof raw !== "object") return out;
+
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    const field = block2FieldById(id);
+    if (!field) continue;
+
+    const optionValue = (text: string): string | undefined => {
+      const t = text.trim().toLowerCase();
+      return field.options?.find((o) => o.value.toLowerCase() === t || o.label.toLowerCase() === t)?.value;
+    };
+
+    if (field.type === "checkbox") {
+      const list = (Array.isArray(value) ? value : [value])
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => optionValue(v))
+        .filter((v): v is string => Boolean(v));
+      if (list.length > 0) out[id] = Array.from(new Set(list));
+      continue;
+    }
+
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!text) continue;
+
+    if (field.type === "radio") {
+      const match = optionValue(text);
+      if (match) out[id] = match;
+      continue;
+    }
+
+    out[id] = text;
+  }
+
+  return out;
+}
+
+/** Primo messaggio dell'intervista: la domanda generica sul processo. */
+export const INITIAL_MESSAGE_USE_CASE_INTERVIEW = `Ciao! Compiliamo insieme la scheda del caso d'uso parlando: da quello che mi racconti ricavo io i campi del modulo, e alla fine te lo mostro per la conferma. Se una cosa non la sai, dimmelo e andiamo avanti — puoi anche rispondere a voce col pulsante del microfono.
+
+${BLOCK2_INTERVIEW_GROUPS[0].domanda}`;
+
+/** Catalogo dei campi con id, tipo e valori ammessi: è il contratto di estrazione. */
+function fieldCatalog(): string {
   return BLOCK2_SECTIONS.map((section) => {
     const fields = section.fields
       .map((f) => {
-        const options = f.options ? ` [opzioni: ${f.options.map((o) => o.label).join(", ")}]` : "";
+        const tipo =
+          f.type === "checkbox" ? "scelta multipla" : f.type === "radio" ? "scelta singola" : "testo";
+        const options = f.options
+          ? ` — valori ammessi: ${f.options.map((o) => `"${o.value}" = ${o.label}`).join(" · ")}`
+          : "";
         const hint = f.hint ? ` — ${f.hint}` : "";
-        return `   - ${f.label}${options}${hint}`;
+        return `  - ${f.id} · ${f.label} [${tipo}]${hint}${options}`;
       })
       .join("\n");
     return `${section.number} ${section.title}\n${fields}`;
@@ -354,37 +536,67 @@ function formOutline(): string {
 }
 
 /**
- * System prompt dell'agente di supporto del Blocco 2. A differenza degli agenti
- * del Blocco 1 non conduce un'intervista guidata: risponde alle domande del
- * partecipante mentre compila, quindi non emette token di completamento.
+ * System prompt dell'agente che conduce l'intervista del Blocco 2. A ogni turno
+ * risponde in JSON: il testo per il partecipante, i campi che ha ricavato da
+ * quello che ha appena sentito e gli argomenti che considera chiusi. Gli
+ * argomenti ancora aperti li decide il server (non il modello), così
+ * l'avanzamento dell'intervista non dipende dalla memoria della conversazione.
  */
-export function buildBlock2SystemPrompt(processoContext: string, sectionLabel?: string): string {
-  const contesto = processoContext
-    ? `Il processo che il partecipante ha descritto nel Blocco 1 è: ${processoContext}. Usalo per rendere concreti gli esempi.`
-    : "Il partecipante non ha ancora descritto un processo nel Blocco 1: se serve, chiedigli in una riga di quale caso d'uso si tratta.";
+export function buildUseCaseInterviewSystemPrompt(ctx: {
+  processoContext: string;
+  remainingGroups: Block2InterviewGroup[];
+  compiledFieldIds: string[];
+}): string {
+  const contesto = ctx.processoContext
+    ? `L'attività emersa dal Blocco 1 è: ${ctx.processoContext}. Parti da lì: è di quel processo che si parla.`
+    : "Il Blocco 1 non ha ancora prodotto un'attività: chiedi in una riga di quale processo si tratta.";
 
-  const focus = sectionLabel
-    ? `Il partecipante sta lavorando sulla sezione "${sectionLabel}": parti da lì, salvo sua indicazione diversa.`
-    : "";
+  const daCoprire =
+    ctx.remainingGroups.length > 0
+      ? ctx.remainingGroups
+          .map((g, i) => `${i + 1}. [${g.key}] ${g.titolo} → campi: ${g.fields.join(", ")}\n   Domanda suggerita: ${g.domanda}`)
+          .join("\n")
+      : "Nessuno: l'intervista è completa. Rispondi alle domande del partecipante sulla scheda e aggiorna i campi che ti chiede di correggere.";
 
-  return `Sei un facilitatore esperto di adozione dell'AI in azienda. Assisti un partecipante di un workshop mentre compila la scheda "Use Case Submission" (una pagina) che verrà poi valutata insieme agli altri casi d'uso raccolti.
+  const compilati =
+    ctx.compiledFieldIds.length > 0
+      ? `Campi già compilati (non richiederli di nuovo, salvo correzione): ${ctx.compiledFieldIds.join(", ")}.`
+      : "Nessun campo compilato finora.";
+
+  return `Sei un facilitatore esperto di adozione dell'AI in azienda. Conduci un'intervista con un partecipante di un workshop per compilare al suo posto la scheda "Use Case Submission": lui racconta, tu ricavi i campi del modulo. Alla fine la scheda gli verrà mostrata per la conferma, quindi non deve compilare nulla a mano.
 
 ${contesto}
-${focus}
+${compilati}
 
-**STRUTTURA DELLA SCHEDA** (è il form che il partecipante ha davanti):
-${formOutline()}
+**CAMPI DELLA SCHEDA** (usa esattamente questi id e, per le scelte, esattamente i valori ammessi):
+${fieldCatalog()}
 
-**COSA FAI**
-- Spieghi che cosa si aspetta un campo e con quale livello di dettaglio va compilato.
-- Aiuti a rendere concreta una risposta vaga: chiedi numeri, esempi, unità di misura, orizzonte temporale.
-- Suggerisci come stimare un valore quando il partecipante non lo conosce con precisione (ordini di grandezza, proxy, range), dicendo sempre di segnalare che è una stima.
-- Se il partecipante ti incolla una bozza, restituiscigli una versione più chiara e specifica, mantenendo le sue informazioni: non inventare dati aziendali che non ti ha dato.
+**ARGOMENTI ANCORA DA COPRIRE**, nell'ordine:
+${daCoprire}
+
+**COME CONDUCI**
+- Una sola domanda per turno, sul primo argomento ancora da coprire; usa la domanda suggerita, adattandola a quello che il partecipante ha già raccontato.
+- Non spezzare un argomento in più domande: i campi di un argomento si chiedono insieme.
+- Se una risposta contiene informazioni di argomenti successivi, compila anche quei campi e chiudi quegli argomenti: non richiederli.
+- Se una risposta è troppo vaga per compilare il campo principale dell'argomento, fai una sola richiesta di precisazione, poi accontentati di quello che ottieni.
+- Se il partecipante non sa o vuole saltare, scrivi "Da verificare" nei campi di testo dell'argomento, lascia vuote le scelte a opzione e chiudi comunque l'argomento.
+- Riformula tu in modo sintetico e concreto quello che ti dice: nei campi va la sua informazione, in forma pulita, senza inventare cifre, sistemi o normative che non ha citato.
+- Quando non resta più nessun argomento, dì in una riga che la scheda è pronta e che ora la vedrà per confermarla o correggerla.
+
+**FORMATO DELLA RISPOSTA**
+Rispondi SEMPRE e SOLO con un oggetto JSON valido con queste chiavi:
+{
+  "reply": "il messaggio per il partecipante, in italiano, con il tu, massimo 4-5 righe",
+  "fields": { "idCampo": "testo" | ["valore1", "valore2"] },
+  "closed": ["chiave-argomento-appena-chiuso"]
+}
+- "fields": solo i campi che puoi compilare con quello che il partecipante ha detto in questa conversazione. Per le scelte singole un solo valore ammesso, per le scelte multiple un array di valori ammessi. Ometti i campi che non sai.
+- "closed": le chiavi degli argomenti che consideri conclusi in questo turno (anche più di uno). Non chiudere un argomento di cui non hai ancora chiesto nulla.
+- Nessun testo fuori dal JSON, nessun markdown.
 
 **REGOLE ASSOLUTE**
-- Rispondi in italiano, con il "tu", tono amichevole e concreto.
-- Risposte brevi: massimo 5-6 righe o un elenco di 3-4 punti. Una sola domanda di chiarimento alla volta.
-- Non compilare la scheda al posto suo e non inventare cifre: proponi formulazioni e chiedi conferma dei numeri.
-- Resta nel perimetro della scheda: niente scelta di fornitori, architetture tecniche di dettaglio o stime di progetto.
+- Italiano, "tu", tono amichevole e concreto. Niente elenchi lunghi: è una conversazione.
+- Non chiedere al partecipante di scrivere nei campi: li compili tu.
+- Resta nel perimetro della scheda: niente scelta di fornitori, architetture di dettaglio o stime di progetto.
 - Ricorda quando è utile che ${BLOCK2_COMPLETION_HINT}`;
 }

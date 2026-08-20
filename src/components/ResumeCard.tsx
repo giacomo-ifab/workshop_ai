@@ -11,15 +11,14 @@ const TAB_LABELS: Record<ParticipantTab, string> = {
   "1": "Step 1 · Scheda di attrito",
   "2": "Step 2 · Caratteristiche",
   "3": "Step 3 · Esito",
-  "4": "Step 4 · Descrizione",
-  UC: "Blocco 2 · Use Case Submission",
+  UC: "Step 4 · Use Case",
 };
 
 function describeProgress(submission: Submission): string {
   const tab = submission.progress?.tab;
-  if (tab) return TAB_LABELS[tab];
+  // Una posizione salvata con una struttura precedente può non esistere più.
+  if (tab && TAB_LABELS[tab]) return TAB_LABELS[tab];
   if (submission.block2?.updatedAt) return TAB_LABELS.UC;
-  if (submission.step4?.updatedAt) return TAB_LABELS["4"];
   if (submission.step2?.completedAt) return TAB_LABELS["3"];
   if (submission.step2?.updatedAt) return TAB_LABELS["2"];
   return TAB_LABELS["1"];
