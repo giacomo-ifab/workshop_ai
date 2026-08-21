@@ -244,7 +244,7 @@ export default function Step1Frizione({
                   <p className="text-xs font-medium text-ifab-text">{IMPATTO_LABEL}</p>
                   <p className="mt-0.5 text-xs text-ifab-text-muted">{IMPATTO_SOTTOTESTO}</p>
 
-                  <div className="mt-3">
+                  <div className="mt-3 flex items-center gap-3">
                     <input
                       type="range"
                       min={0}
@@ -255,6 +255,9 @@ export default function Step1Frizione({
                       onChange={(e) => setRisposta(domanda.id, { impatto: Number(e.target.value) })}
                       className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ifab-blue/30 accent-ifab-blue"
                     />
+                    <span className="w-12 shrink-0 rounded-lg bg-ifab-blue/10 px-2 py-1 text-center text-sm font-semibold text-ifab-blue">
+                      {(answer?.impatto ?? IMPATTO_DEFAULT).toFixed(1)}
+                    </span>
                   </div>
 
                   <div className="mt-2 flex flex-col gap-0.5 text-[11px] text-ifab-text-muted sm:flex-row sm:justify-between">
